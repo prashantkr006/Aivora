@@ -64,15 +64,17 @@ VARIANT_18: Dict[str, float] = {
     # max_trades_per_day is the variable under test.
 }
 
-# Same gates as VARIANT_18 but with the vol-regime filter widened to the
-# full [0, 1] range — used by the feature-ablation A/B run so that model
-# quality (not the volatility gate) drives the comparison.
-VARIANT_18_VOL_OFF: Dict[str, float] = {
-    **VARIANT_18,
+VARIANT_18_VOL_OFF = {
+    "prob_threshold_up": 0.55,
+    "prob_threshold_down": 0.60,
+    "take_profit_pct": 0.60,
+    "stop_loss_pct": 0.30,
+    "min_minutes_since_open": 30,
+    "max_minutes_since_open": 300,
     "vol_regime_min": 0.0,
     "vol_regime_max": 999.0,
+    "max_trades_per_day": 10,
 }
-
 
 # =============================================================
 #  Fold + training

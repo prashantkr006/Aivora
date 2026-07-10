@@ -296,6 +296,111 @@ def _engineer_one_symbol(df: pd.DataFrame, params: dict) -> pd.DataFrame:
         min_periods=200,
     ).rank(pct=True)
 
+    # =============================================================
+    #  Experiment 1 additions — EMAs, ADX, Regime flags
+    # =============================================================
+    # NOTE: appended at the very end so downstream column order for
+    # every existing feature is unchanged. Every column below is
+    # side-effect free — no look-ahead, all per-symbol.
+    #
+    # ABLATION TOGGLES — two independent switches:
+    #
+    #   _EXP1_EMA_ENABLED  → +12 columns (4 EMAs, 2 slopes, 2 dists,
+    #                        3 alignment flags, 1 alignment score)
+    #   _EXP1_ADX_ENABLED  → +6 columns (adx_14, di_plus_14, di_minus_14,
+    #                        adx_slope, is_trending, is_ranging)
+    #
+    # Family totals (added on top of the 74-column baseline):
+    #   Baseline               →  74
+    #   EMA only               →  86
+    #   ADX/Regime only        →  80
+    #   EMA + ADX/Regime (full)→  92
+    _EXP1_EMA_ENABLED = True
+    _EXP1_ADX_ENABLED = True
+
+    if _EXP1_EMA_ENABLED:
+        # ---- Exponential moving averages ----
+        for span in (20, 50, 100, 200):
+            out[f"ema_{span}"] = close.ewm(
+                span=span, adjust=False, min_periods=span
+            ).mean()
+
+        # 5-period % slope (scale-invariant, so 24k Nifty vs 55k BN both fit).
+        for span in (20, 50):
+            prev = out[f"ema_{span}"].shift(5)
+            out[f"ema_{span}_slope"] = (out[f"ema_{span}"] - prev) / prev
+
+        # Signed distance from key EMAs (positive = price above EMA).
+        for span in (20, 200):
+            ema = out[f"ema_{span}"]
+            out[f"distance_from_ema{span}_pct"] = (close - ema) / ema
+
+        # Alignment flags — 1 when the faster EMA is above the slower one.
+        out["ema20_above_ema50"] = (out["ema_20"] > out["ema_50"]).astype(int)
+        out["ema50_above_ema100"] = (out["ema_50"] > out["ema_100"]).astype(int)
+        out["ema100_above_ema200"] = (out["ema_100"] > out["ema_200"]).astype(int)
+        out["ema_alignment_score"] = (
+            out["ema20_above_ema50"]
+            + out["ema50_above_ema100"]
+            + out["ema100_above_ema200"]
+        )
+
+    if _EXP1_ADX_ENABLED:
+        # ---- ADX (14-period Wilder) ----
+        prev_close = close.shift(1)
+        tr = pd.concat([
+            (high - low).abs(),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ], axis=1).max(axis=1)
+
+        up_move = high.diff()
+        down_move = -low.diff()
+        plus_dm = pd.Series(
+            np.where((up_move > down_move) & (up_move > 0), up_move, 0.0),
+            index=out.index,
+        )
+        minus_dm = pd.Series(
+            np.where((down_move > up_move) & (down_move > 0), down_move, 0.0),
+            index=out.index,
+        )
+
+        # Wilder's smoothing = ewm with alpha = 1/period.
+        period = 14
+        atr_wilder = tr.ewm(
+            alpha=1 / period, adjust=False, min_periods=period
+        ).mean()
+        plus_dm_smooth = plus_dm.ewm(
+            alpha=1 / period, adjust=False, min_periods=period
+        ).mean()
+        minus_dm_smooth = minus_dm.ewm(
+            alpha=1 / period, adjust=False, min_periods=period
+        ).mean()
+
+        atr_safe = atr_wilder.replace(0, np.nan)
+        out["di_plus_14"] = 100 * plus_dm_smooth / atr_safe
+        out["di_minus_14"] = 100 * minus_dm_smooth / atr_safe
+        di_sum = (out["di_plus_14"] + out["di_minus_14"]).replace(0, np.nan)
+        dx = 100 * (out["di_plus_14"] - out["di_minus_14"]).abs() / di_sum
+        out["adx_14"] = dx.ewm(
+            alpha=1 / period, adjust=False, min_periods=period
+        ).mean()
+
+        adx_prev = out["adx_14"].shift(5)
+        out["adx_slope"] = (out["adx_14"] - adx_prev) / adx_prev.replace(0, np.nan)
+
+        # ---- Simple market-regime flags ----
+        # If EMA family is also enabled, use its alignment score as an
+        # additional trend confirmation; otherwise fall back to a pure
+        # ADX-based trend flag so this family remains self-contained.
+        if _EXP1_EMA_ENABLED:
+            out["is_trending"] = (
+                (out["adx_14"] > 25) & (out["ema_alignment_score"] >= 2)
+            ).astype(int)
+        else:
+            out["is_trending"] = (out["adx_14"] > 25).astype(int)
+        out["is_ranging"] = (out["adx_14"] < 20).astype(int)
+
     return out
 
 
