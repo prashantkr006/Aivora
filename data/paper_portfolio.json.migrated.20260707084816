@@ -1,0 +1,58 @@
+{
+  "mode": "paper",
+  "initial_capital": 100000.0,
+  "current_capital": 100000.0,
+  "peak_capital": 100000.0,
+  "master_switch": false,
+  "settings": {
+    "prob_threshold_up": 0.55,
+    "prob_threshold_down": 0.6,
+    "take_profit_pct": 0.6,
+    "stop_loss_pct": 0.3,
+    "min_minutes_since_open": 30,
+    "max_minutes_since_open": 300,
+    "vol_regime_min": 0.15,
+    "vol_regime_max": 0.9,
+    "max_trades_per_day": 3,
+    "horizon_candles": 12,
+    "risk_per_trade_pct": 0.02,
+    "brokerage_flat_per_order": 20.0,
+    "brokerage_pct_cap": 0.0003,
+    "stt_pct_sell": 0.001,
+    "sebi_pct": 1e-05,
+    "exchange_txn_pct": 0.0003503,
+    "stamp_duty_pct_buy": 3e-05,
+    "gst_pct": 0.18,
+    "slippage_pct": 0.001
+  },
+  "last_data_update": "2026-07-06T18:03:48",
+  "last_signal_time": null,
+  "trades": [],
+  "log": [
+    {
+      "ts": "2026-07-06T17:16:46+05:30",
+      "level": "warn",
+      "msg": "Master switch ON"
+    },
+    {
+      "ts": "2026-07-06T17:16:53+05:30",
+      "level": "warn",
+      "msg": "Master switch OFF"
+    },
+    {
+      "ts": "2026-07-06T17:57:53+05:30",
+      "level": "error",
+      "msg": "Dhan backfill failed: DhanHQ error: {'error_code': 'DH-901', 'error_type': 'Invalid_Authentication', 'error_message': 'Client ID or user generated access token is invalid or expired.'}"
+    },
+    {
+      "ts": "2026-07-06T18:00:23+05:30",
+      "level": "error",
+      "msg": "Dhan backfill failed: DhanHQ error: {'error_code': 'DH-901', 'error_type': 'Invalid_Authentication', 'error_message': 'Client ID or user generated access token is invalid or expired.'}"
+    },
+    {
+      "ts": "2026-07-06T18:03:48+05:30",
+      "level": "info",
+      "msg": "Manual Dhan backfill completed."
+    }
+  ]
+}

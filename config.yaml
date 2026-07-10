@@ -1,0 +1,158 @@
+# =============================================================
+#  AiVora — central configuration
+#  All knobs the pipeline / ML / backtest layers read live here.
+#  Override locally by editing this file or by exporting the
+#  corresponding env var (see .env.example).
+# =============================================================
+
+project:
+  name: AiVora
+  base_capital: 100000           # ₹1,00,000
+  timezone: Asia/Kolkata
+
+paths:
+  # data_raw_dir is an intermediate cache for any raw data pulled by
+  # your ingestion process before it lands in the SQLite store.
+  data_raw_dir: data/raw
+  data_processed_dir: data/processed
+  db_dir: data/db
+  sqlite_path: data/db/aivora.sqlite
+  parquet_path: data/processed/training_dataset.parquet
+  models_dir: models
+  registry_path: models/model_registry.json
+  logs_dir: logs
+  reports_dir: reports
+
+# ----------- Instruments to trade -------------
+# DhanHQ security IDs / segments for the spot indices — stable per
+# instrument, used to drive spot history + the rolling-option calls.
+instruments:
+  - symbol: NIFTY
+    exchange: NSE
+    lot_size: 75                 # NFO lot size (update if exchange revises)
+    strike_step: 50
+    dhan_security_id: "13"       # NIFTY 50 index
+    dhan_segment: "IDX_I"
+    dhan_instrument_type: "INDEX"
+  - symbol: BANKNIFTY
+    exchange: NSE
+    lot_size: 15
+    strike_step: 100
+    dhan_security_id: "25"       # NIFTY BANK index
+    dhan_segment: "IDX_I"
+    dhan_instrument_type: "INDEX"
+
+market:
+  open: "09:15"
+  close: "15:30"
+  candle_interval_minutes: 5     # 1, 5, 15, 25, 60 supported by Dhan
+
+# ----------- Historical load range -------------
+# Used by `python -m scripts.run_pipeline --mode historical` and by
+# scripts/run_historical_load.py. Override via CLI flags or by editing
+# this block. Verified empirically (sane strikes matching real NIFTY
+# levels) 6, 9, 12, 18, 24, 30, 36, 48, and 60 months back — Dhan's
+# "up to 5 years" claim holds in practice.
+historical:
+  start_date: "2021-07-05"
+  end_date: ""                   # blank -> today's date at runtime
+  expiry_weekday: 3              # 0=Mon ... 3=Thu (NSE weekly expiry)
+
+# ----------- DhanHQ API client -------------
+# Requires an active Data APIs subscription on the account
+# (~Rs499+tax/month) — without it every data call fails with DH-902.
+# Rate limits (reverse-engineered against the live API; the rolling-
+# option endpoint throttles much harder than the general data rate):
+#   * General data endpoints : ~5 req/sec
+#   * Option chain (live)    : 1 req every 3 sec
+#   * Expired options data   : keep well under 1 req every 5 sec, and
+#     expect occasional DH-904 (rate limit) even so — the client
+#     retries those with backoff.
+dhan:
+  request_timeout_sec: 10
+  data_rate_per_sec: 5
+  option_chain_min_gap_sec: 3
+  expired_options_min_gap_sec: 5
+  intraday_lookback_days: 90     # cap any single spot call to this
+
+# ----------- Zerodha API client -------------
+# TODO: kept solely for future live order placement via Kite Connect.
+# The data pipeline does NOT use this section.
+zerodha:
+  request_timeout_sec: 10
+  max_candles_per_call: 1000
+  rate_limit_per_sec: 3
+  retry:
+    max_attempts: 5
+    initial_backoff_sec: 1.0
+    max_backoff_sec: 30.0
+
+# ----------- Feature engineering -------------
+features:
+  rsi_period: 14
+  bb_period: 20
+  bb_std: 2
+  ma_short: 20
+  ma_long: 50
+  return_lags_minutes: [5, 10, 15, 30]
+  drop_na: true
+
+# ----------- Target label -------------
+labels:
+  horizon_candles: 6             # 6 × 5-min = 30 minutes forward
+  up_threshold: 0.003            # +0.3 %
+  down_threshold: -0.003         # –0.3 %
+
+# ----------- Modelling -------------
+model:
+  train_fraction: 0.70           # chronological split
+  validation_fraction: 0.15
+  random_state: 42
+  early_stopping_rounds: 100
+  optuna_trials: 50
+  optuna_timeout_sec: 1800       # 30 min cap per study
+  cv_splits: 5                   # walk-forward TimeSeriesSplit folds
+  metric: "multi_logloss"        # LightGBM eval metric
+
+# ----------- Backtesting -------------
+backtest:
+  # With class weights + 3-class softmax the ceiling probability
+  # for UP/DOWN is empirically well below 0.65 — 0.42 lets the
+  # highest-conviction picks fire.
+  probability_threshold: 0.42
+  max_trades_per_day: 3
+  daily_loss_limit_pct: 0.05     # 5 % of base capital
+  risk_per_trade_pct: 0.02       # 2 % risk-of-capital per trade
+  option_delta: 0.5
+  expiry_days_assumption: 7      # weekly expiry assumption
+
+  # Optional TP/SL on OPTION-premium % change (null → not enforced,
+  # exit at horizon).  0.5 = +50 % premium move.
+  take_profit_pct: null
+  stop_loss_pct: null
+
+  # Time-of-day filters, in minutes since 09:15.
+  min_minutes_since_open: 0      # 0 = allow trading from the open
+  max_minutes_since_open: 355    # skip the very last 20 min by default
+
+  # Realistic retail costs (Zerodha F&O — Q3 2025 schedule).  Every
+  # component is applied per round trip in backtest/costs.py.
+  costs:
+    brokerage_flat_per_order: 20.0    # INR per order, either side
+    brokerage_pct_cap: 0.0003         # 0.03 % — used if flat is smaller
+    stt_pct_sell: 0.001               # 0.10 % on the SELL leg
+    sebi_pct: 0.00001                 # ₹10 / crore
+    exchange_txn_pct: 0.0003503       # 0.03503 % on premium turnover
+    stamp_duty_pct_buy: 0.00003       # 0.003 % on BUY leg
+    gst_pct: 0.18
+    slippage_pct: 0.001               # 0.10 % — models bid-ask crossing
+
+# ----------- Goals (used by scripts/iterate.py) -------------
+goals:
+  min_avg_monthly_return_pct: 0.03    # 3 %
+  target_avg_monthly_return_pct: 0.05 # 5 %
+  max_drawdown_abs: 0.20              # 20 % of capital
+  min_sharpe: 1.0
+  min_win_rate: 0.45
+  min_reward_to_risk: 1.5
+  min_months_positive_pct: 0.6        # ≥ 60 % of months green

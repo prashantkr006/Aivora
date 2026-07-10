@@ -1,0 +1,31 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env
+
+# ---------- Project artefacts ----------
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/db/*
+!data/db/.gitkeep
+logs/*
+!logs/.gitkeep
+models/*
+!models/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# ---------- Streamlit secrets ----------
+.streamlit/secrets.toml
+
+# ---------- IDE / OS ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,47 @@
+# ---------- Core scientific stack ----------
+numpy>=1.26
+pandas>=2.2
+pyarrow>=15.0          # Parquet I/O
+scipy>=1.12
+
+# ---------- Machine learning ----------
+scikit-learn>=1.4
+lightgbm>=4.3
+optuna>=3.6
+joblib>=1.4
+
+# ---------- Trading / market data ----------
+dhanhq>=2.2             # Historical backfill only
+                        # (requires a Data APIs subscription on the account)
+kiteconnect>=4.2       # Live daily data + order placement
+nsepython>=2.95        # NSE trading-calendar / holidays helper
+
+# ---------- Live trading UI + scheduler ----------
+streamlit>=1.36
+apscheduler>=3.10
+plotly>=5.20
+pyotp>=2.9             # TOTP for optional one-click Kite auto-login
+
+# ---------- Multi-user webapp ----------
+cryptography>=42.0     # Fernet symmetric encryption for stored secrets
+bcrypt>=4.1            # Password hashing
+email-validator>=2.1   # RFC-5321 email format checks on registration
+itsdangerous>=2.2      # HMAC-signed session tokens
+fastapi>=0.115         # OAuth callback sidecar server
+uvicorn[standard]>=0.30
+streamlit-cookies-controller>=0.0.4  # Persistent-session cookies for Streamlit
+streamlit-autorefresh>=1.0.1  # Timed page reruns for the dashboard event log
+
+# ---------- Plotting / reports ----------
+matplotlib>=3.8
+seaborn>=0.13
+
+# ---------- Engineering glue ----------
+PyYAML>=6.0
+python-dotenv>=1.0
+tqdm>=4.66
+rich>=13.7             # Pretty console logging
+
+# ---------- Dev / test ----------
+pytest>=8.0
+pytest-cov>=5.0

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aivora"
+version = "0.1.0"
+description = "Automated Nifty/Bank Nifty options trading research stack."
+requires-python = ">=3.10"
+readme = "README.md"
+authors = [{ name = "Prashant" }]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"

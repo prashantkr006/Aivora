@@ -1,0 +1,40 @@
+version: "3.9"
+
+# Two services share the same repo checkout via a bind-mount so the
+# webapp SQLite and the .env stay in sync between them.  In a real
+# deployment you'd bake a versioned image and mount only ./data.
+services:
+  dashboard:
+    build: .
+    image: aivora:latest
+    ports:
+      - "8501:8501"
+    environment:
+      - AIVORA_DASHBOARD_URL=${AIVORA_DASHBOARD_URL:-http://localhost:8501}
+      - AIVORA_AUTH_URL=${AIVORA_AUTH_URL:-http://localhost:8502}
+      - AIVORA_MASTER_KEY=${AIVORA_MASTER_KEY}
+      - DHAN_CLIENT_ID=${DHAN_CLIENT_ID:-}
+      - DHAN_ACCESS_TOKEN=${DHAN_ACCESS_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      - auth
+    restart: unless-stopped
+
+  auth:
+    build: .
+    image: aivora:latest
+    command: >
+      python -m scripts.run_auth_server
+    ports:
+      - "8502:8502"
+    environment:
+      - AIVORA_DASHBOARD_URL=${AIVORA_DASHBOARD_URL:-http://localhost:8501}
+      - AIVORA_MASTER_KEY=${AIVORA_MASTER_KEY}
+      - AIVORA_AUTH_PORT=8502
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
