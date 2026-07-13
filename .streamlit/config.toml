@@ -1,0 +1,29 @@
+# AiVora Streamlit runtime configuration.
+#
+# The custom CSS in app/multi_user_app.py already overrides most widget
+# surfaces, but pinning the theme here means widgets render in the right
+# palette during the ~150 ms before Streamlit finishes injecting our CSS.
+
+[server]
+headless = true
+# Cap uploads at 10 MB — the app never accepts uploads today, so this is
+# purely a defensive limit against surprise misuse.
+maxUploadSize = 10
+# Streamlit defaults enable CORS + XSRF together; leaving them at their
+# defaults keeps the CSRF cookie flow working when the app is fronted
+# by a reverse proxy in production.
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#3B82F6"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#111827"
+textColor = "#F8FAFC"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = false

@@ -1,0 +1,23 @@
+{
+  "name": "AiVora",
+  "short_name": "AiVora",
+  "description": "AiVora — automated Nifty & Bank Nifty options trading dashboard",
+  "icons": [
+    {
+      "src": "/app/static/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/app/static/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#0B1220",
+  "background_color": "#0B1220",
+  "display": "standalone",
+  "start_url": "/"
+}

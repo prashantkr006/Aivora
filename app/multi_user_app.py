@@ -14,6 +14,7 @@ Launch:
 
 from __future__ import annotations
 
+import base64
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from aivora.utils.config import get_config  # noqa: E402
 from aivora.utils.logger import get_logger  # noqa: E402
@@ -40,10 +42,42 @@ from aivora.webapp.auth_server import kite_login_url  # noqa: E402
 
 log = get_logger("app.multi_user")
 
+
+# =============================================================
+#  Brand assets — favicon + inline logo data URI
+# =============================================================
+_ASSETS_DIR = _ROOT / "app" / "assets"
+_FAVICON_PATH = _ASSETS_DIR / "favicon" / "favicon-96x96.png"
+_LOGO_PATH = _ASSETS_DIR / "favicon" / "web-app-manifest-192x192.png"
+
+
+def _load_favicon():
+    """Return a PIL Image for st.set_page_config(page_icon=…)."""
+    try:
+        return Image.open(_FAVICON_PATH)
+    except Exception:  # pragma: no cover — first-run/dev fallback
+        return "📈"
+
+
+def _logo_data_uri() -> str:
+    """Base64 data URI for the AiVora mark, used inline in navbar HTML.
+
+    Cached at module import — a 7 KB PNG becomes a 10 KB inline string, cheap.
+    """
+    try:
+        data = _LOGO_PATH.read_bytes()
+        return f"data:image/png;base64,{base64.b64encode(data).decode('ascii')}"
+    except Exception:
+        return ""
+
+
+_LOGO_URI = _logo_data_uri()
+
+
 st.set_page_config(
     page_title="AiVora",
     layout="wide",
-    page_icon="📈",
+    page_icon=_load_favicon(),
     initial_sidebar_state="expanded",
 )
 
@@ -371,10 +405,15 @@ section[data-testid="stSidebar"] [data-testid="stExpander"] details[open] summar
 .av-navbar-brand { display: flex; align-items: center; gap: 0.6rem; }
 .av-navbar-logo {
     width: 34px; height: 34px;
-    background: linear-gradient(135deg, #3B82F6, #16C784);
     border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem; color: white; font-weight: 700;
+    overflow: hidden;
+    background: transparent;
+}
+.av-navbar-logo img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
 }
 .av-navbar-title { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; }
 .av-navbar-status { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
@@ -852,7 +891,7 @@ def _fmt_event_time(ts: str) -> str:
 def _auth_brand() -> None:
     st.markdown(
         '<div class="av-auth-brand">'
-        '<div class="av-navbar-logo">A</div>'
+        f'<div class="av-navbar-logo"><img src="{_LOGO_URI}" alt="AiVora"></div>'
         '<div class="av-auth-brand-name">AiVora</div>'
         '</div>',
         unsafe_allow_html=True,
@@ -1178,7 +1217,7 @@ def top_navbar(user: user_mod.User, s: dict) -> None:
         f"""
         <div class="av-navbar">
             <div class="av-navbar-brand">
-                <div class="av-navbar-logo">A</div>
+                <div class="av-navbar-logo"><img src="{_LOGO_URI}" alt="AiVora"></div>
                 <div class="av-navbar-title">AiVora</div>
             </div>
             <div class="av-navbar-status">

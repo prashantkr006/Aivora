@@ -41,6 +41,7 @@ PyYAML>=6.0
 python-dotenv>=1.0
 tqdm>=4.66
 rich>=13.7             # Pretty console logging
+Pillow>=10.0           # Streamlit favicon + brand-logo image loading
 
 # ---------- Dev / test ----------
 pytest>=8.0

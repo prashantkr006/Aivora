@@ -23,6 +23,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from PIL import Image
 
 from aivora.live import kite_auth
 from aivora.live import scheduler as sched
@@ -32,7 +33,15 @@ from aivora.live.position_tracker import emergency_square_off
 from aivora.live.safety import check_ip_whitelist_hint
 from aivora.utils.config import get_config
 
-st.set_page_config(page_title="AiVora — live", layout="wide", page_icon="📈")
+
+def _favicon():
+    try:
+        return Image.open(_ROOT / "app" / "assets" / "favicon" / "favicon-96x96.png")
+    except Exception:
+        return "📈"
+
+
+st.set_page_config(page_title="AiVora — live", layout="wide", page_icon=_favicon())
 
 
 # =============================================================
