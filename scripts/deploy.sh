@@ -66,16 +66,19 @@ EOF
 sudo systemctl enable caddy
 sudo systemctl restart caddy
 
-# ---- 5. Build + cold-start data (only if missing) ----
+# ---- 5. Build + verify data present ----
 mkdir -p data/db data/processed logs models backups
 docker compose build
 
 if [[ ! -f data/db/aivora.sqlite ]]; then
-    echo "==> First-run cold start: pulling 13 months of Dhan history"
-    docker compose run --rm dashboard python -m scripts.run_historical_load
+    echo "!! data/db/aivora.sqlite missing on the VPS."
+    echo "!! Upload your local DB from your Windows machine first:"
+    echo "!!   scp -i \$HOME/.ssh/aivora-key.pem D:/work/AiVora/data/db/aivora.sqlite ubuntu@<VPS_IP>:~/aivora/data/db/"
+    echo "!! Then re-run this script."
+    exit 1
 fi
-if [[ ! -f models/current_up.pkl ]]; then
-    echo "==> Freezing 92-feature model"
+if [[ ! -f models/current_up.pkl ]] || [[ ! -f models/current_down.pkl ]]; then
+    echo "==> Freezing 92-feature model on the shipped DB"
     docker compose run --rm dashboard python -m scripts.freeze_model
 fi
 
