@@ -2,12 +2,12 @@
 
 Convenience wrapper that:
 
-1. Pulls fresh candles from Dhan (``run_daily_update``).
-2. Re-runs the full training pipeline.
+1. Rebuilds the training Parquet from whatever is currently in the
+   SQLite DB (kept fresh by the live Kite tick).
+2. Runs the full training pipeline.
 3. Registers the new model version.
 
-Drop this into Windows Task Scheduler / cron to retrain weekly or
-whenever the daily update brings in significant new data.
+Drop this into Windows Task Scheduler / cron to retrain weekly.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ log = get_logger("scripts.retrain")
 
 def main() -> int:
     try:
-        log.info("Step 1/3 — daily update")
-        pipeline.run_daily_update()
+        log.info("Step 1/3 — rebuild training Parquet from DB")
+        pipeline.build_training_dataset()
 
         log.info("Step 2/3 — training")
         splits = make_splits()

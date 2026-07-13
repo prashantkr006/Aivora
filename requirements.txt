@@ -11,9 +11,7 @@ optuna>=3.6
 joblib>=1.4
 
 # ---------- Trading / market data ----------
-dhanhq>=2.2             # Historical backfill only
-                        # (requires a Data APIs subscription on the account)
-kiteconnect>=4.2       # Live daily data + order placement
+kiteconnect>=4.2       # Live spot + options data + order placement
 nsepython>=2.95        # NSE trading-calendar / holidays helper
 
 # ---------- Live trading UI + scheduler ----------

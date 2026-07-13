@@ -1,14 +1,13 @@
-"""Zerodha Kite Connect wrapper — the LIVE broker for the daily loop.
+"""Zerodha Kite Connect wrapper — sole broker for data and orders.
 
 Responsibilities:
 
 * Pull the latest 5-minute spot candles for NIFTY 50 and NIFTY BANK.
-* Fetch live ATM CE/PE quotes.
+* Fetch live ATM CE/PE quotes and snapshot them per tick.
+* Historical spot + option contract candles (with the Historical Data
+  add-on subscription).
 * Read available funds.
 * Place / monitor / cancel orders.
-
-Only used at runtime — never during backtesting or historical
-backfill (which stay on DhanHQ / raw CSVs).
 
 Construction does not perform any network I/O; the underlying
 KiteConnect instance is lazy so unit tests + import-time UI

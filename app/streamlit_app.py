@@ -276,20 +276,7 @@ def top_bar():
                         st.success("Data refreshed.")
                 except Exception as exc:
                     st.error(f"Refresh failed: {exc}")
-    with col5:
-        # Dhan-based backfill — works any time, including after market
-        # close.  Uses the same daily-update path as scripts.run_pipeline.
-        if st.button("📥 Backfill (Dhan)", help="Fetch last ~5 days from Dhan — safe any time"):
-            with st.spinner("Fetching from Dhan (this can take 10-20 s)…"):
-                try:
-                    from aivora.pipeline import pipeline as pipe_mod
-                    pipe_mod.run_daily_update(record_options=False)
-                    p.set_last_data_update(datetime.now())
-                    p.append_log("Manual Dhan backfill completed.", "info")
-                    st.success("Backfilled via Dhan. Reload to see the new candles.")
-                except Exception as exc:
-                    p.append_log(f"Dhan backfill failed: {exc}", "error")
-                    st.error(f"Backfill failed: {exc}")
+    # (Dhan backfill button removed — Kite live tick keeps data fresh.)
 
 
 # =============================================================

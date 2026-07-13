@@ -11,8 +11,8 @@ Two rules guide every feature:
 
 Beyond the classical technicals, this module adds an
 options-aware feature bundle that survives even when live OI/IV
-are unavailable — a common situation for older historical rows
-where Dhan's intraday endpoint only supplies OHLCV:
+are unavailable (e.g. early history rows before options snapshots
+were being captured):
 
 * :func:`_synthetic_iv` — implied vol backed out of ATM CE+PE
   premium via a straddle approximation.

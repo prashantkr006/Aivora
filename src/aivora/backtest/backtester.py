@@ -6,10 +6,11 @@ threshold, we buy 1+ lots of the ATM CE (UP) or PE (DOWN) and
 exit either after ``horizon_candles`` candles (default 30 min) or
 sooner if a TP/SL threshold is hit — whichever comes first.
 
-Option P&L is approximated with a delta + linear-theta model
-because Dhan's intraday endpoint doesn't ship a live option price
-path.  Costs are the full Indian-retail F&O schedule from
-:mod:`.costs`.
+Option P&L is approximated with a delta + linear-theta model for
+rows that don't have a real ce_ltp/pe_ltp in the parquet; when
+those columns are populated (Kite live snapshot fills them going
+forward) the backtester uses the real premium instead.  Costs are
+the full Indian-retail F&O schedule from :mod:`.costs`.
 
 The engine is a pure function: given a ``probs`` array and a
 ``Splits`` object, it returns a metrics dict.  All knobs are

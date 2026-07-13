@@ -1117,35 +1117,6 @@ def profile_page(user: user_mod.User) -> None:
                         st.rerun()
 
     st.divider()
-    st.subheader("DhanHQ")
-    d = broker_mod.get(user.id, "DHAN")
-    d_has = {"access_token": bool(d and d.access_token)}
-    with st.form("dhan-form", clear_on_submit=False):
-        client_id = st.text_input(
-            "DHAN client id",
-            value=(d.client_id if d else "") or "",
-        )
-        st.caption(f"Access token: {_stored_badge(d_has['access_token'])}")
-        access = st.text_input(
-            "Access token (24-hour, from web.dhan.co)",
-            value="", type="password",
-            help="Leave blank to keep existing.",
-        )
-        save_d = st.form_submit_button("Save DhanHQ credentials", width="stretch")
-    if save_d:
-        patch = {"client_id": client_id.strip() or None}
-        if access:
-            patch["access_token"] = access
-        try:
-            broker_mod.upsert(user.id, "DHAN", **patch)
-            st.success("Saved.")
-        except Exception as exc:
-            st.error(f"Save failed: {exc}")
-
-    if d and d.has_data_creds():
-        st.success(f"DhanHQ token present (last refreshed {_fmt_ist(d.token_updated_at)}).")
-
-    st.divider()
     st.subheader("Change password")
     with st.form("pw-form", clear_on_submit=True):
         old = st.text_input("Current password", type="password")
@@ -1720,11 +1691,8 @@ def sidebar_for(user: user_mod.User) -> str:
 
     with st.sidebar.expander("Broker status", expanded=False):
         z = broker_mod.get(user.id, "ZERODHA")
-        d = broker_mod.get(user.id, "DHAN")
         z_ok = bool(z and z.has_data_creds())
-        d_ok = bool(d and d.has_data_creds())
         st.markdown(f"{'🟢' if z_ok else '⚪'} Zerodha (Kite)")
-        st.markdown(f"{'🟢' if d_ok else '⚪'} DhanHQ")
         if not z_ok:
             st.caption("Go to Profile → Zerodha to connect.")
 

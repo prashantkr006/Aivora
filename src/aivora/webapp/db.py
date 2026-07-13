@@ -43,7 +43,7 @@ SCHEMA_USER_BROKERS = """
 CREATE TABLE IF NOT EXISTS user_brokers (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id                INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    broker                 TEXT    NOT NULL CHECK(broker IN ('ZERODHA','DHAN')),
+    broker                 TEXT    NOT NULL CHECK(broker IN ('ZERODHA')),
     client_id              TEXT,
     api_key_enc            TEXT,
     api_secret_enc         TEXT,

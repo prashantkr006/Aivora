@@ -24,60 +24,32 @@ paths:
   reports_dir: reports
 
 # ----------- Instruments to trade -------------
-# DhanHQ security IDs / segments for the spot indices — stable per
-# instrument, used to drive spot history + the rolling-option calls.
 instruments:
   - symbol: NIFTY
     exchange: NSE
     lot_size: 75                 # NFO lot size (update if exchange revises)
     strike_step: 50
-    dhan_security_id: "13"       # NIFTY 50 index
-    dhan_segment: "IDX_I"
-    dhan_instrument_type: "INDEX"
   - symbol: BANKNIFTY
     exchange: NSE
     lot_size: 15
     strike_step: 100
-    dhan_security_id: "25"       # NIFTY BANK index
-    dhan_segment: "IDX_I"
-    dhan_instrument_type: "INDEX"
 
 market:
   open: "09:15"
   close: "15:30"
-  candle_interval_minutes: 5     # 1, 5, 15, 25, 60 supported by Dhan
+  candle_interval_minutes: 5
 
-# ----------- Historical load range -------------
-# Used by `python -m scripts.run_pipeline --mode historical` and by
-# scripts/run_historical_load.py. Override via CLI flags or by editing
-# this block. Verified empirically (sane strikes matching real NIFTY
-# levels) 6, 9, 12, 18, 24, 30, 36, 48, and 60 months back — Dhan's
-# "up to 5 years" claim holds in practice.
+# ----------- Historical range (informational only) -------------
+# Kept for feature engineering's expiry-day computation. The live
+# tick keeps spot + options fresh via Kite; historical backfill is not
+# a runtime path any more.
 historical:
   start_date: "2021-07-05"
   end_date: ""                   # blank -> today's date at runtime
   expiry_weekday: 3              # 0=Mon ... 3=Thu (NSE weekly expiry)
 
-# ----------- DhanHQ API client -------------
-# Requires an active Data APIs subscription on the account
-# (~Rs499+tax/month) — without it every data call fails with DH-902.
-# Rate limits (reverse-engineered against the live API; the rolling-
-# option endpoint throttles much harder than the general data rate):
-#   * General data endpoints : ~5 req/sec
-#   * Option chain (live)    : 1 req every 3 sec
-#   * Expired options data   : keep well under 1 req every 5 sec, and
-#     expect occasional DH-904 (rate limit) even so — the client
-#     retries those with backoff.
-dhan:
-  request_timeout_sec: 10
-  data_rate_per_sec: 5
-  option_chain_min_gap_sec: 3
-  expired_options_min_gap_sec: 5
-  intraday_lookback_days: 90     # cap any single spot call to this
-
-# ----------- Zerodha API client -------------
-# TODO: kept solely for future live order placement via Kite Connect.
-# The data pipeline does NOT use this section.
+# ----------- Zerodha Kite API client -------------
+# Drives both live data (spot + options snapshot) and order placement.
 zerodha:
   request_timeout_sec: 10
   max_candles_per_call: 1000

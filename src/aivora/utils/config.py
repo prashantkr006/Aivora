@@ -41,19 +41,6 @@ class KiteCredentials:
 
 
 @dataclass(frozen=True)
-class DhanCredentials:
-    """Credentials for the DhanHQ REST API.
-
-    Only ``client_id`` + ``access_token`` are required — data
-    endpoints additionally require an active Data APIs subscription
-    on the account itself (not something these credentials control).
-    """
-
-    client_id: str
-    access_token: str
-
-
-@dataclass(frozen=True)
 class Config:
     """Container exposing config sections as plain dictionaries.
 
@@ -89,10 +76,6 @@ class Config:
         return self.raw["zerodha"]
 
     @property
-    def dhan(self) -> Dict[str, Any]:
-        return self.raw["dhan"]
-
-    @property
     def features(self) -> Dict[str, Any]:
         return self.raw["features"]
 
@@ -119,13 +102,6 @@ class Config:
             api_secret=os.getenv("KITE_API_SECRET", ""),
             access_token=os.getenv("KITE_ACCESS_TOKEN", ""),
             user_id=os.getenv("KITE_USER_ID", ""),
-        )
-
-    def dhan_credentials(self) -> DhanCredentials:
-        """Return DhanHQ credentials sourced from environment variables."""
-        return DhanCredentials(
-            client_id=os.getenv("DHAN_CLIENT_ID", ""),
-            access_token=os.getenv("DHAN_ACCESS_TOKEN", ""),
         )
 
 

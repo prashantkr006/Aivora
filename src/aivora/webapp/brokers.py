@@ -6,8 +6,7 @@ stored as Fernet ciphertext and only decrypted in memory at the
 moment it's needed.  Callers never see the ciphertext directly —
 they always get a plaintext ``BrokerCredentials`` back.
 
-Two brokers per user: ``ZERODHA`` and ``DHAN``.  A user can have
-one, both, or neither.
+Zerodha is currently the only supported broker.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ from . import db as db_mod
 
 log = get_logger(__name__)
 
-_BROKERS = ("ZERODHA", "DHAN")
+_BROKERS = ("ZERODHA",)
 
 
 # =============================================================
@@ -44,8 +43,6 @@ class BrokerCredentials:
         """Enough to fetch market data / place orders on Kite."""
         if self.broker == "ZERODHA":
             return bool(self.api_key and self.access_token)
-        if self.broker == "DHAN":
-            return bool(self.client_id and self.access_token)
         return False
 
     def has_totp_creds(self) -> bool:
