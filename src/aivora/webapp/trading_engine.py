@@ -164,6 +164,17 @@ class MarketDataCache:
                     database.upsert_spot_futures(cleaned)
                 t_fetch = _time.perf_counter() - t0
 
+                # ---- 1b. ATM option snapshot per symbol (Kite) ----
+                # Keeps options_chain warm without Dhan. Failures here
+                # never block the tick — options-derived features are only
+                # ~10% of model importance and LightGBM handles NaN.
+                t_before_opts = _time.perf_counter()
+                try:
+                    cls._snapshot_options(kite, now, cfg.instruments)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("option snapshot failed (skipping): %s", exc)
+                t_opts = _time.perf_counter() - t_before_opts
+
                 # ---- 2. slim-window load + feature engineering ----
                 # A 60-day window is enough for every rolling feature
                 # to produce identical values at the latest row (see
@@ -211,15 +222,70 @@ class MarketDataCache:
                 cls._last_error = None
                 log.info(
                     "MarketDataCache refreshed: %d predictions "
-                    "(fetch=%.2fs, features=%.2fs, total=%.2fs; "
+                    "(spot=%.2fs, opts=%.2fs, features=%.2fs, total=%.2fs; "
                     "slim window=%d rows)",
-                    len(preds), t_fetch, t_feats, t_total, len(feats),
+                    len(preds), t_fetch, t_opts, t_feats, t_total, len(feats),
                 )
                 return True
             except Exception as exc:  # noqa: BLE001
                 cls._last_error = str(exc)
                 log.exception("MarketDataCache refresh failed")
                 raise
+
+    @classmethod
+    def _snapshot_options(cls, kite: KiteClient, now: datetime, instruments) -> None:
+        """Snapshot the ATM CE + PE for every configured symbol and
+        upsert into ``options_chain``. Called once per 5-min tick.
+
+        This is what Dhan's ``run_daily_update`` used to do — now
+        happens through Kite so no Dhan dependency in production.
+        Snapshot timestamp is bucketed to the current 5-min mark so
+        it aligns with the spot candle for the join.
+        """
+        # Bucket to the last 5-min boundary (matches spot candle labels).
+        bucket = now.replace(second=0, microsecond=0)
+        bucket = bucket.replace(minute=(bucket.minute // 5) * 5)
+
+        rows = []
+        for inst in instruments:
+            sym = inst["symbol"]
+            spot = cls._spot_prices.get(sym)
+            if spot is None:
+                # First tick of the process — fall back to querying Kite
+                # spot LTP so we still get an option snapshot.
+                try:
+                    spot_df = kite.fetch_recent_spot(sym, days_back=1)
+                    if not spot_df.empty:
+                        spot = float(spot_df.iloc[-1]["close"])
+                except Exception:  # noqa: BLE001
+                    continue
+            if not spot:
+                continue
+
+            try:
+                q = kite.atm_option_quote(sym, spot)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("option quote %s failed: %s", sym, exc)
+                continue
+
+            strike = q["atm_strike"]
+            for side, ltp_key, oi_key in (
+                ("CE", "ce_ltp", "ce_oi"),
+                ("PE", "pe_ltp", "pe_oi"),
+            ):
+                rows.append({
+                    "datetime": bucket,
+                    "symbol": sym,
+                    "strike": strike,
+                    "type": side,
+                    "ltp": float(q.get(ltp_key) or 0.0),
+                    "oi": float(q.get(oi_key) or 0.0),
+                    "iv": None,  # Kite's quote endpoint doesn't include IV
+                })
+
+        if rows:
+            df = pd.DataFrame(rows)
+            database.upsert_option_chain(df)
 
     # ---- test helper ----
     @classmethod
