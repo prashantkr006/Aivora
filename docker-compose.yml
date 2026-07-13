@@ -1,4 +1,3 @@
-version: "3.9"
 
 # Two services share the same repo checkout via a bind-mount so the
 # webapp SQLite and the .env stay in sync between them.  In a real

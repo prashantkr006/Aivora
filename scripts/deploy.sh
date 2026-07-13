@@ -66,14 +66,11 @@ grep -q "^AIVORA_AUTH_URL=" .env      || echo "AIVORA_AUTH_URL=https://${AUTH_HO
 # ---- 4. Caddy reverse proxy (auto-TLS via Let's Encrypt) ----
 echo "==> Writing Caddyfile"
 sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-${APP_HOST} {
+${DOMAIN}, ${APP_HOST} {
     reverse_proxy localhost:8501
 }
 ${AUTH_HOST} {
     reverse_proxy localhost:8502
-}
-${DOMAIN} {
-    redir https://${APP_HOST}{uri} permanent
 }
 EOF
 sudo systemctl enable caddy
