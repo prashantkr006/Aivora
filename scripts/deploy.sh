@@ -90,6 +90,10 @@ if [[ ! -f data/db/aivora.sqlite ]]; then
     echo "!! Then re-run this script."
     exit 1
 fi
+if [[ ! -f data/processed/training_dataset.parquet ]]; then
+    echo "==> Building training parquet from the shipped SQLite DB"
+    docker compose run --rm dashboard python -c "from aivora.pipeline import pipeline; pipeline.build_training_dataset()"
+fi
 if [[ ! -f models/current_up.pkl ]] || [[ ! -f models/current_down.pkl ]]; then
     echo "==> Freezing 92-feature model on the shipped DB"
     docker compose run --rm dashboard python -m scripts.freeze_model
