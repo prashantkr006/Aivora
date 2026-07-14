@@ -1539,10 +1539,8 @@ def dashboard_page(user: user_mod.User) -> None:
     s = portfolio.summary()
     state = portfolio.load()
 
-    try:
-        sm_mod.sync_user(user.id, mode, s["master_switch"])
-    except Exception as exc:  # noqa: BLE001
-        st.info(f"Scheduler: {exc}")
+    # Scheduler is now owned by the standalone worker container
+    # (scripts/run_worker.py). No dashboard-side registration required.
 
     top_navbar(user, s)
     hero_card(s, state)
@@ -1810,9 +1808,7 @@ def main() -> None:
         (register_page if page == "register" else login_page)()
         return
 
-    if not st.session_state.get("_sched_registered"):
-        sm_mod.set_tick_function(_per_user_tick)
-        st.session_state["_sched_registered"] = True
+    # (scheduler bootstrap removed — the worker container owns it now)
 
     if st.query_params.get("kite_connected"):
         st.toast("✅ Kite connected.", icon="✅")

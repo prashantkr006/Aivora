@@ -1,7 +1,12 @@
 
-# Two services share the same repo checkout via a bind-mount so the
+# Three services share the same repo checkout via a bind-mount so the
 # webapp SQLite and the .env stay in sync between them.  In a real
 # deployment you'd bake a versioned image and mount only ./data.
+#
+#   dashboard  — Streamlit UI (8501). Users log in here, view state.
+#   auth       — FastAPI OAuth callback sidecar (8502).
+#   worker     — headless APScheduler. Runs 5-min ticks per active user
+#                REGARDLESS of whether the dashboard is being visited.
 services:
   dashboard:
     build: .
@@ -12,6 +17,7 @@ services:
       - AIVORA_DASHBOARD_URL=${AIVORA_DASHBOARD_URL:-http://localhost:8501}
       - AIVORA_AUTH_URL=${AIVORA_AUTH_URL:-http://localhost:8502}
       - AIVORA_MASTER_KEY=${AIVORA_MASTER_KEY}
+      - TZ=Asia/Kolkata
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -31,7 +37,22 @@ services:
       - AIVORA_DASHBOARD_URL=${AIVORA_DASHBOARD_URL:-http://localhost:8501}
       - AIVORA_MASTER_KEY=${AIVORA_MASTER_KEY}
       - AIVORA_AUTH_PORT=8502
+      - TZ=Asia/Kolkata
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: aivora:latest
+    command: >
+      python -m scripts.run_worker
+    environment:
+      - AIVORA_MASTER_KEY=${AIVORA_MASTER_KEY}
+      - TZ=Asia/Kolkata
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models:/app/models
     restart: unless-stopped
