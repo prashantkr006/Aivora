@@ -256,7 +256,7 @@ class MarketDataCache:
                 try:
                     spot_df = kite.fetch_recent_spot(sym, days_back=1)
                     if not spot_df.empty:
-                        spot = float(spot_df.iloc[-1]["close"])
+                        spot = float(spot_df.iloc[-1]["spot_close"])
                 except Exception:  # noqa: BLE001
                     continue
             if not spot:
