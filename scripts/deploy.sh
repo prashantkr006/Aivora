@@ -108,7 +108,7 @@ CRON_LINE="0 22 * * * cd $(pwd) && tar czf backups/nightly_\$(date +\\%Y\\%m\\%d
 echo ""
 echo "==> DONE"
 echo "    Dashboard:  https://${APP_HOST}"
-echo "    OAuth:      https://${AUTH_HOST}/callback/kite"
+echo "    OAuth:      https://${AUTH_HOST}/kite/callback"
 echo ""
 echo "Next:"
 echo "  1. Open https://${APP_HOST} in a browser."
