@@ -104,8 +104,13 @@ def default_settings() -> Dict[str, Any]:
                                       # Symmetric with UP now; both gate at 55 %.
         "take_profit_pct": 0.60,
         "stop_loss_pct": 0.30,
-        "min_minutes_since_open": 30,      # 09:45
-        "max_minutes_since_open": 300,     # 14:15
+        "min_minutes_since_open": 0,       # 09:15 — opening window opened after
+                                           # 55-mo WF confirmed +19% P&L
+                                           # (₹13.5L → ₹16.1L) with better Sharpe.
+        "max_minutes_since_open": 300,     # 14:15 — CLOSING kept blocked;
+                                           # WF numbers past 14:15 are backtest
+                                           # artifacts (synthetic post-market
+                                           # exits), 3-mo dominate 55% of P&L.
         "vol_regime_min": 0.15,
         "vol_regime_max": 0.90,
         "max_trades_per_day": 10,

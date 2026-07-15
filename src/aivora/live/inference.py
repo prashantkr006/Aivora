@@ -152,7 +152,7 @@ class LiveInference:
         Mirrors backtester.run_backtest so paper P&L matches the
         strategy the walk-forward loop validated.
         """
-        min_msoo = float(settings.get("min_minutes_since_open", 30))
+        min_msoo = float(settings.get("min_minutes_since_open", 0))
         max_msoo = float(settings.get("max_minutes_since_open", 300))
         thr_up = float(settings.get("prob_threshold_up", 0.55))
         thr_dn = float(settings.get("prob_threshold_down", 0.55))

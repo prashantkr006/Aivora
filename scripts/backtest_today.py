@@ -56,6 +56,8 @@ def _parse_date(value: str) -> date:
 VARIANT_18 = {
     "prob_threshold_up": 0.55,
     "prob_threshold_down": 0.55,
+    "min_minutes_since_open": 0,
+    "max_minutes_since_open": 300,
     "take_profit_pct": 0.60,
     "stop_loss_pct": 0.30,
     "min_minutes_since_open": 30,

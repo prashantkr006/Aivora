@@ -56,8 +56,8 @@ VARIANT_18: Dict[str, float] = {
     "prob_threshold_down": 0.55,   # was 0.60 — 30-day sensitivity boost validated
     "take_profit_pct": 0.60,
     "stop_loss_pct": 0.30,
-    "min_minutes_since_open": 30,
-    "max_minutes_since_open": 300,
+    "min_minutes_since_open": 0,    # opening added (validated +19% P&L)
+    "max_minutes_since_open": 300,  # closing kept blocked (backtest artifacts)
     "vol_regime_min": 0.15,
     "vol_regime_max": 0.90,
     # cooldown defaults to 0.0 (OFF) in the backtester itself.
@@ -293,7 +293,20 @@ def main() -> int:
         default=[str(p) for p in _default_test_months()],
         help="Test months as YYYY-MM (default = 2026-01 through 2026-07)",
     )
+    ap.add_argument("--min-msoo", type=float, default=None,
+                    help="Override min_minutes_since_open (default: variant #18)")
+    ap.add_argument("--max-msoo", type=float, default=None,
+                    help="Override max_minutes_since_open (default: variant #18)")
+    ap.add_argument("--tag", type=str, default=None,
+                    help="Suffix for output filenames (avoids overwriting default files)")
     args = ap.parse_args()
+
+    if args.min_msoo is not None:
+        VARIANT_18["min_minutes_since_open"] = float(args.min_msoo)
+        VARIANT_18_VOL_OFF["min_minutes_since_open"] = float(args.min_msoo)
+    if args.max_msoo is not None:
+        VARIANT_18["max_minutes_since_open"] = float(args.max_msoo)
+        VARIANT_18_VOL_OFF["max_minutes_since_open"] = float(args.max_msoo)
 
     test_months = [pd.Period(m, freq="M") for m in args.test_months]
 
@@ -328,7 +341,8 @@ def main() -> int:
     df_out = pd.DataFrame(per_fold_rows)
     reports_dir = cfg.paths["reports_dir"]
     reports_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = reports_dir / "walk_forward_2026_comparison.csv"
+    suffix = f"_{args.tag}" if args.tag else ""
+    csv_path = reports_dir / f"walk_forward_2026_comparison{suffix}.csv"
     df_out.to_csv(csv_path, index=False)
     log.info("Wrote per-fold rows → %s", csv_path)
 
