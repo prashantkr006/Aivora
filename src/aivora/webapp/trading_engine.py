@@ -410,7 +410,7 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
     considered = []  # human-readable per-symbol verdicts
 
     thr_up = float(settings.get("prob_threshold_up", 0.55))
-    thr_dn = float(settings.get("prob_threshold_down", 0.60))
+    thr_dn = float(settings.get("prob_threshold_down", 0.55))
     vr_min = float(settings.get("vol_regime_min") or 0.0)
     vr_max = float(settings.get("vol_regime_max") or 1.0)
     # Cooldown defaults to OFF — the 30-day comparison (see

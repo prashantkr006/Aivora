@@ -53,7 +53,7 @@ log = get_logger("scripts.walk_forward_limits")
 
 VARIANT_18: Dict[str, float] = {
     "prob_threshold_up": 0.55,
-    "prob_threshold_down": 0.60,
+    "prob_threshold_down": 0.55,   # was 0.60 — 30-day sensitivity boost validated
     "take_profit_pct": 0.60,
     "stop_loss_pct": 0.30,
     "min_minutes_since_open": 30,

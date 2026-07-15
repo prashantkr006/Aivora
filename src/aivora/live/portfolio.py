@@ -99,7 +99,9 @@ class Trade:
 def default_settings() -> Dict[str, Any]:
     return {
         "prob_threshold_up": 0.55,
-        "prob_threshold_down": 0.60,
+        "prob_threshold_down": 0.55,  # was 0.60 — 30-day sensitivity test showed
+                                      # ₹21k→₹60k P&L jump (44→134 trades) at 0.55.
+                                      # Symmetric with UP now; both gate at 55 %.
         "take_profit_pct": 0.60,
         "stop_loss_pct": 0.30,
         "min_minutes_since_open": 30,      # 09:45
