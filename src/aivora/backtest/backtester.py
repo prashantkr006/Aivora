@@ -255,6 +255,7 @@ def run_backtest(
 
         # Walk the intervening candles — replicates the live tick's
         # per-step trailing update + exit check.
+        entry_day = row["datetime"].date() if hasattr(row["datetime"], "date") else pd.Timestamp(row["datetime"]).date()
         for step in range(1, horizon + 1):
             j = i + step
             if j >= len(meta):
@@ -263,6 +264,23 @@ def run_backtest(
             r = meta.iloc[j]
             if r["symbol"] != sym:
                 exit_i = j - 1
+                break
+            # Day-boundary guard — meta is sorted by (symbol, datetime), so
+            # after the last bar of the day we walk straight into the NEXT
+            # trading day's opening bars for the same symbol. Zerodha auto-
+            # squares off open F&O around 15:20 IST; live trading can't
+            # capture overnight gaps as intra-day profit. Force exit at the
+            # previous same-day bar so backtest P&L stays realistic.
+            r_day = r["datetime"].date() if hasattr(r["datetime"], "date") else pd.Timestamp(r["datetime"]).date()
+            if r_day != entry_day:
+                exit_i = j - 1
+                prev = meta.iloc[exit_i]
+                spot_exit = float(prev["spot_close"])
+                exit_premium = _exit_premium(
+                    entry_premium, spot_entry, spot_exit,
+                    side, (step - 1) * 5, bt,
+                )
+                exit_reason = "day_end"
                 break
             candidate_premium = _exit_premium(
                 entry_premium, spot_entry, float(r["spot_close"]),
