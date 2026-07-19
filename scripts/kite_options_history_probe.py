@@ -86,8 +86,11 @@ def main() -> int:
     # 2) Pick sample contracts to probe — nearest 3 expiries per symbol,
     #    one strike near current spot each.
     now = datetime.now()
-    # Kite's daily interval caps at ~2000 days per call. Use 1999 to stay safe.
-    probe_from = now - timedelta(days=1999)
+    # Options contracts have short lifespans (weeklies ~2-3 weeks,
+    # monthlies ~3 months, quarterlies ~6 months). 730 days = 2 years is
+    # far more than any active option contract will have. Also safely
+    # under Kite's 2000-day daily-interval cap even after tz shifts.
+    probe_from = now - timedelta(days=730)
     probe_to = now
     results: List[Dict] = []
 
