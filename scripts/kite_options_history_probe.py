@@ -86,7 +86,8 @@ def main() -> int:
     # 2) Pick sample contracts to probe — nearest 3 expiries per symbol,
     #    one strike near current spot each.
     now = datetime.now()
-    probe_from = datetime(2018, 1, 1)   # ask for 8 years — we'll see what actually returns
+    # Kite's daily interval caps at ~2000 days per call. Use 1999 to stay safe.
+    probe_from = now - timedelta(days=1999)
     probe_to = now
     results: List[Dict] = []
 
