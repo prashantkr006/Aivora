@@ -24,6 +24,7 @@ services:
       - ./models:/app/models
       - ./scripts:/app/scripts
       - ./src:/app/src
+      - ./app:/app/app
     depends_on:
       - auth
     restart: unless-stopped
