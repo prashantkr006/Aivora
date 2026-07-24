@@ -1385,6 +1385,8 @@ def trades_section(state: dict) -> None:
                 )
                 continue
 
+            show_date = name != "Today"
+
             def _row(r):
                 is_open = pd.isna(r["exit_dt"])
                 pnl = r.get("realized_pnl") if not is_open else r.get("unrealized_pnl")
@@ -1396,8 +1398,11 @@ def trades_section(state: dict) -> None:
                 dur_ref = r["exit_dt"] if not is_open else pd.Timestamp(now)
                 dur_min = int((dur_ref - r["entry_dt"]).total_seconds() // 60)
                 reason = str(r.get("exit_reason") or "").upper() if not is_open else "OPEN"
-                return pd.Series({
-                    "Time": r["entry_dt"].strftime("%H:%M"),
+                cols = {}
+                if show_date:
+                    cols["Date"] = r["entry_dt"].normalize()
+                cols["Time"] = r["entry_dt"]
+                cols.update({
                     "Symbol": r["symbol"],
                     "Side": {"CE": "CALL", "PE": "PUT"}.get(r["side"], r["side"]),
                     "Strike": int(float(r["strike"])),
@@ -1410,8 +1415,19 @@ def trades_section(state: dict) -> None:
                     "Duration": f"{dur_min}m",
                     "Status": reason,
                 })
+                return pd.Series(cols)
             show = sub.apply(_row, axis=1).sort_values("Time", ascending=False)
-            st.dataframe(show, width="stretch", height=380, hide_index=True)
+            col_cfg = {
+                "Time": st.column_config.DatetimeColumn(
+                    "Time", format="HH:mm", width="small"
+                ),
+            }
+            if show_date:
+                col_cfg["Date"] = st.column_config.DatetimeColumn(
+                    "Date", format="DD MMM YYYY", width="small"
+                )
+            st.dataframe(show, width="stretch", height=380, hide_index=True,
+                         column_config=col_cfg)
 
 
 def charts_section(state: dict, s: dict) -> None:
@@ -1437,21 +1453,40 @@ def charts_section(state: dict, s: dict) -> None:
 
     tab_eq, tab_bar = st.tabs(["Equity curve", "Daily P&L"])
     with tab_eq:
+        init_cap = float(state["initial_capital"])
+        eq_min = float(df["equity"].min())
+        eq_max = float(df["equity"].max())
+        lo = min(eq_min, init_cap)
+        hi = max(eq_max, init_cap)
+        pad = max((hi - lo) * 0.15, init_cap * 0.005)
+        y_lo, y_hi = lo - pad, hi + pad
+        last_eq = float(df["equity"].iloc[-1])
+        line_color = "#16C784" if last_eq >= init_cap else "#EF4444"
+        fill_rgba = ("rgba(22, 199, 132, 0.10)" if last_eq >= init_cap
+                     else "rgba(239, 68, 68, 0.10)")
+        x_first = df["exit_time"].iloc[0]
+        x_last = df["exit_time"].iloc[-1]
+
         fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=[x_first, x_last], y=[init_cap, init_cap], mode="lines",
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ))
         fig.add_trace(go.Scatter(
             x=df["exit_time"], y=df["equity"], mode="lines",
             name="Equity",
-            line=dict(color="#3B82F6", width=2.5),
-            fill="tozeroy",
-            fillcolor="rgba(59, 130, 246, 0.08)",
-            hovertemplate="<b>%{y:,.0f}</b><br>%{x|%d %b %H:%M}<extra></extra>",
+            line=dict(color=line_color, width=2.5),
+            fill="tonexty",
+            fillcolor=fill_rgba,
+            hovertemplate="<b>₹%{y:,.0f}</b><br>%{x|%d %b %H:%M}<extra></extra>",
         ))
-        fig.add_hline(y=float(state["initial_capital"]),
+        fig.add_hline(y=init_cap,
                       line_dash="dash", line_color="rgba(148,163,184,0.5)",
-                      annotation_text="Initial capital",
+                      annotation_text=f"Initial ₹{init_cap:,.0f}",
                       annotation_position="right",
                       annotation_font_color="#94A3B8")
         _plotly_dark_layout(fig, height=320)
+        fig.update_yaxes(range=[y_lo, y_hi], tickprefix="₹", tickformat=",.0f")
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     with tab_bar:
