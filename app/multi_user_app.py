@@ -1622,10 +1622,47 @@ def dashboard_page(user: user_mod.User) -> None:
         )
         typed = st.text_input("Type CONFIRM to enable live trading", key="_confirm_txt")
         if typed.strip() == "CONFIRM":
+            # Sync initial_capital from Zerodha available cash so the
+            # dashboard's ROI/equity math matches the real account.
+            # Only if no live trades exist yet (set_initial_capital
+            # otherwise raises — safety rail).
+            cap_msg = None
+            try:
+                state_pre = portfolio.load()
+                has_trades = any(True for _ in state_pre.get("trades", []))
+                if not has_trades:
+                    z = broker_mod.get(user.id, "ZERODHA")
+                    if z and z.access_token and z.api_key:
+                        from aivora.live.kite_client import KiteClient
+                        from aivora.utils.config import KiteCredentials
+                        k = KiteClient(creds=KiteCredentials(
+                            api_key=z.api_key, api_secret=z.api_secret or "",
+                            access_token=z.access_token, user_id=z.client_id or "",
+                        ))
+                        cash = float(k.available_funds())
+                        if cash > 0:
+                            portfolio.set_initial_capital(cash)
+                            cap_msg = f"Initial capital synced from Zerodha: ₹{cash:,.0f}"
+                        else:
+                            cap_msg = ("Zerodha returned ₹0 available cash — "
+                                       "keeping current initial capital.")
+                    else:
+                        cap_msg = ("Kite not connected — keeping current "
+                                   "initial capital. Connect via Profile.")
+            except Exception as exc:  # noqa: BLE001
+                cap_msg = (f"Could not fetch Zerodha balance ({exc}); "
+                           "keeping current initial capital.")
+
             portfolio.set_master_switch(True)
             st.session_state["_confirm_live"] = False
             st.session_state["_confirm_txt"] = ""
-            st.success("Live trading ARMED.")
+            if cap_msg:
+                if cap_msg.startswith("Initial capital synced"):
+                    st.success(f"Live trading ARMED. {cap_msg}")
+                else:
+                    st.warning(f"Live trading ARMED. {cap_msg}")
+            else:
+                st.success("Live trading ARMED.")
             st.rerun()
 
     left, right = st.columns([3, 2], gap="large")
