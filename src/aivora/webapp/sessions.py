@@ -119,7 +119,18 @@ def install_from_cookie() -> Optional[int]:
     # 2. Cookie path (survives refresh).
     ck = _cookies()
     if ck is not None:
-        token = ck.get(_COOKIE_NAME)
+        # streamlit-cookies-controller stores its cookie dict on a
+        # private attribute that is None until the JS component
+        # reports back.  Its own ``.get()`` does ``name not in
+        # self.__cookies`` which raises ``TypeError: argument of type
+        # 'NoneType' is not iterable`` on that first render.  Treat
+        # any get-time exception as "not ready yet" and fall into the
+        # single-rerun probe below.
+        token = None
+        try:
+            token = ck.get(_COOKIE_NAME)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("cookie get raised (component still loading): %s", exc)
         if isinstance(token, str) and token:
             uid = verify(token)
             if uid is not None:
