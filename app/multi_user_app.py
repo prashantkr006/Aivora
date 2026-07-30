@@ -1614,13 +1614,20 @@ def dashboard_page(user: user_mod.User) -> None:
         except Exception:
             pass
 
-    # Confirmation modal for live trading (rendered here so it stays near hero)
+    # Confirmation modal for live trading (rendered here so it stays near hero).
+    # We rotate a version suffix on the text_input's `key` so that the next time
+    # the modal opens after being armed, it starts empty instead of the widget
+    # remembering a stale "CONFIRM" (which would auto-arm on first render).
     if st.session_state.get("_confirm_live"):
         st.error(
             "You're about to enable LIVE trading.  Real money at risk.  "
             "Type CONFIRM below and press Enter."
         )
-        typed = st.text_input("Type CONFIRM to enable live trading", key="_confirm_txt")
+        confirm_ver = int(st.session_state.get("_confirm_ver", 0))
+        typed = st.text_input(
+            "Type CONFIRM to enable live trading",
+            key=f"_confirm_txt_v{confirm_ver}",
+        )
         if typed.strip() == "CONFIRM":
             # Sync initial_capital from Zerodha available cash so the
             # dashboard's ROI/equity math matches the real account.
@@ -1655,7 +1662,9 @@ def dashboard_page(user: user_mod.User) -> None:
 
             portfolio.set_master_switch(True)
             st.session_state["_confirm_live"] = False
-            st.session_state["_confirm_txt"] = ""
+            # Bump the version so the next confirm modal spawns a fresh
+            # text_input with no leftover value from this cycle.
+            st.session_state["_confirm_ver"] = confirm_ver + 1
             if cap_msg:
                 if cap_msg.startswith("Initial capital synced"):
                     st.success(f"Live trading ARMED. {cap_msg}")
