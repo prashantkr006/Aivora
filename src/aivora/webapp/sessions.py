@@ -105,11 +105,12 @@ def install_from_cookie() -> Optional[int]:
     an unloaded controller (its ``.get`` raises TypeError because the
     internal dict is still None).  Once the JS component reports
     back, Streamlit reruns automatically and this function succeeds
-    on that second pass.  We do NOT force a manual rerun ourselves:
-    doing so restarts the script before the JS has had a chance to
-    send its data back, and the loop repeats forever until the probe
-    flag stops it — at which point the user is stuck on the login
-    page even though their cookie is valid.
+    on that second pass.
+
+    While we're waiting, we set the ``_ck_loading`` flag so the caller
+    (``main``) can show a spinner instead of the login page — otherwise
+    the user sees a "flash of login" on every refresh and thinks they
+    got logged out.
     """
     import streamlit as st
 
@@ -121,16 +122,21 @@ def install_from_cookie() -> Optional[int]:
 
     ck = _cookies()
     if ck is None:
+        # Cookie support unavailable — treat as genuinely logged out.
+        st.session_state.pop("_ck_loading", None)
         return None
 
-    token = None
     try:
         token = ck.get(_COOKIE_NAME)
     except Exception as exc:  # noqa: BLE001
         # Controller not ready — the auto-rerun from the underlying
         # component will call us again once cookies have loaded.
         log.debug("cookie get not ready yet: %s", exc)
+        st.session_state["_ck_loading"] = True
         return None
+
+    # get() succeeded → cookies loaded (dict may or may not have ours).
+    st.session_state.pop("_ck_loading", None)
 
     if isinstance(token, str) and token:
         uid = verify(token)
@@ -138,6 +144,17 @@ def install_from_cookie() -> Optional[int]:
             st.session_state["user_id"] = uid
             return uid
     return None
+
+
+def is_loading() -> bool:
+    """True while the cookie controller hasn't reported back yet.
+
+    Callers should render a placeholder (not the login page) so the
+    user isn't shown a false "logged out" state during the async
+    cookie load that follows every browser refresh.
+    """
+    import streamlit as st
+    return bool(st.session_state.get("_ck_loading"))
 
 
 def issue(user_id: int) -> None:
@@ -161,7 +178,7 @@ def revoke() -> None:
     """Clear the cookie + session_state on logout."""
     import streamlit as st
 
-    for k in ("user_id", "mode", "_flash", "_page"):
+    for k in ("user_id", "mode", "_flash", "_page", "_ck_loading"):
         st.session_state.pop(k, None)
     ck = _cookies()
     if ck is None:

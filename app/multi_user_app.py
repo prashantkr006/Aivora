@@ -1885,6 +1885,24 @@ def main() -> None:
     _flash()
     user = _sess_user()
     if user is None:
+        # The signed cookie loads asynchronously — during that first
+        # render after a browser refresh we may have a valid session
+        # that just hasn't been reported by the JS component yet.
+        # Show a spinner instead of the login page so the user isn't
+        # bounced to sign-in every time they hit F5.
+        if sess_mod.is_loading():
+            st.markdown(
+                "<div style='display:flex;flex-direction:column;align-items:center;"
+                "justify-content:center;min-height:60vh;gap:1rem;color:#94A3B8'>"
+                "<div style='width:32px;height:32px;border:3px solid #27344D;"
+                "border-top-color:#3B82F6;border-radius:50%;"
+                "animation:av-spin 0.8s linear infinite'></div>"
+                "<div>Restoring your session…</div>"
+                "</div>"
+                "<style>@keyframes av-spin{to{transform:rotate(360deg)}}</style>",
+                unsafe_allow_html=True,
+            )
+            return
         page = st.session_state.get("_page", "login")
         (register_page if page == "register" else login_page)()
         return
