@@ -12,7 +12,10 @@
 set -euo pipefail
 
 DOMAIN="${AIVORA_DOMAIN:-aivora-self.com}"
-APP_HOST="app.${DOMAIN}"
+# The dashboard is served at the root domain (no "app." subdomain).
+# The auth sidecar is a separate subdomain so Kite's OAuth callback
+# lands there instead of embedding inside the Streamlit page.
+APP_HOST="${DOMAIN}"
 AUTH_HOST="auth.${DOMAIN}"
 
 echo "==> Deploying AiVora for ${DOMAIN}"
@@ -66,7 +69,7 @@ grep -q "^AIVORA_AUTH_URL=" .env      || echo "AIVORA_AUTH_URL=https://${AUTH_HO
 # ---- 4. Caddy reverse proxy (auto-TLS via Let's Encrypt) ----
 echo "==> Writing Caddyfile"
 sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
-${DOMAIN}, ${APP_HOST} {
+${DOMAIN} {
     reverse_proxy localhost:8501
 }
 ${AUTH_HOST} {

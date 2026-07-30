@@ -1230,12 +1230,12 @@ def hero_card(s: dict, state: dict) -> None:
             <div class="av-hero-grid">
                 <div>
                     <div class="av-hero-label">Portfolio value</div>
-                    <div class="av-hero-value big">₹{portfolio_val:,.0f}</div>
-                    <div class="av-hero-sub">Initial ₹{float(s['initial_capital']):,.0f} · Unrealised {float(s['unrealized_pnl_total']):+,.0f}</div>
+                    <div class="av-hero-value big">₹{portfolio_val:,.2f}</div>
+                    <div class="av-hero-sub">Initial ₹{float(s['initial_capital']):,.2f} · Unrealised {float(s['unrealized_pnl_total']):+,.2f}</div>
                 </div>
                 <div>
                     <div class="av-hero-label">Today's P&amp;L</div>
-                    <div class="av-hero-value {pnl_cls}">{pnl_sign}₹{today_pnl:,.0f}</div>
+                    <div class="av-hero-value {pnl_cls}">{pnl_sign}₹{today_pnl:,.2f}</div>
                     <div class="av-hero-sub">{pnl_sign}{pnl_pct:.2f}% today</div>
                 </div>
                 <div>
@@ -1478,15 +1478,15 @@ def charts_section(state: dict, s: dict) -> None:
             line=dict(color=line_color, width=2.5),
             fill="tonexty",
             fillcolor=fill_rgba,
-            hovertemplate="<b>₹%{y:,.0f}</b><br>%{x|%d %b %H:%M}<extra></extra>",
+            hovertemplate="<b>₹%{y:,.2f}</b><br>%{x|%d %b %H:%M}<extra></extra>",
         ))
         fig.add_hline(y=init_cap,
                       line_dash="dash", line_color="rgba(148,163,184,0.5)",
-                      annotation_text=f"Initial ₹{init_cap:,.0f}",
+                      annotation_text=f"Initial ₹{init_cap:,.2f}",
                       annotation_position="right",
                       annotation_font_color="#94A3B8")
         _plotly_dark_layout(fig, height=320)
-        fig.update_yaxes(range=[y_lo, y_hi], tickprefix="₹", tickformat=",.0f")
+        fig.update_yaxes(range=[y_lo, y_hi], tickprefix="₹", tickformat=",.2f")
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     with tab_bar:
@@ -1497,7 +1497,7 @@ def charts_section(state: dict, s: dict) -> None:
         fig.add_trace(go.Bar(
             x=daily["date"], y=daily["realized_pnl"],
             marker=dict(color=colors),
-            hovertemplate="<b>₹%{y:,.0f}</b><br>%{x}<extra></extra>",
+            hovertemplate="<b>₹%{y:,.2f}</b><br>%{x}<extra></extra>",
         ))
         _plotly_dark_layout(fig, height=320)
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
@@ -1762,8 +1762,8 @@ def sidebar_for(user: user_mod.User) -> str:
     with st.sidebar.expander("Capital & risk", expanded=False):
         state = portfolio.load()
         settings = state.get("settings", {})
-        st.caption(f"Initial capital: ₹{float(state['initial_capital']):,.0f}")
-        st.caption(f"Current: ₹{float(s['current_capital']):,.0f}")
+        st.caption(f"Initial capital: ₹{float(state['initial_capital']):,.2f}")
+        st.caption(f"Current: ₹{float(s['current_capital']):,.2f}")
         st.caption(f"Max trades/day: {settings.get('max_trades_per_day', 3)}")
         st.caption(f"TP: +{settings.get('take_profit_pct', 0.60) * 100:.0f}% · "
                    f"SL: -{settings.get('stop_loss_pct', 0.30) * 100:.0f}%")
