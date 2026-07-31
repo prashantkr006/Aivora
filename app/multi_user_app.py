@@ -1762,9 +1762,10 @@ def sidebar_for(user: user_mod.User) -> str:
         unsafe_allow_html=True,
     )
 
+    # Admin nav is intentionally NOT rendered in the sidebar so
+    # regular users can't tell an admin surface exists at all.
+    # Admins reach it via the URL: aivora-self.com/?page=admin
     pages = ["Dashboard", "Profile"]
-    if user.is_admin:
-        pages.append("Admin")
     page = st.sidebar.radio("Navigate", pages, index=0, label_visibility="collapsed")
     which = page.lower()
 
@@ -1884,6 +1885,43 @@ def sidebar_for(user: user_mod.User) -> str:
 # =============================================================
 #  Admin page
 # =============================================================
+def _admin_sidebar(user: user_mod.User) -> None:
+    """Minimal sidebar for the URL-gated admin surface.
+
+    We don't call sidebar_for() here because that ships the
+    Dashboard/Profile radio and the Live/Paper controls, which
+    are noise on the admin page.  Just show identity + a way out.
+    """
+    initials = _initials(user.display_name or user.email)
+    st.sidebar.markdown(
+        f'''
+        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.5rem 0 1rem">
+            <div class="av-avatar" style="width:38px;height:38px">{initials}</div>
+            <div>
+                <div style="font-weight:600;font-size:0.95rem">{user.display_name or user.email.split("@")[0]}</div>
+                <div style="color:var(--text-secondary);font-size:0.75rem">admin console</div>
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+    if st.sidebar.button("← Back to dashboard", width="stretch",
+                         key="_admin_back"):
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+        st.rerun()
+    st.sidebar.divider()
+    if st.sidebar.button("Sign out", width="stretch", key="_admin_signout"):
+        _logout()
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+        st.rerun()
+
+
 def admin_page() -> None:
     st.title("Admin")
     rows = admin_mod.list_with_status()
@@ -2087,11 +2125,23 @@ def main() -> None:
         except Exception:
             pass
 
+    # Admin surface is URL-gated: only /?page=admin reaches it, and
+    # only if the current user actually has the admin flag.  Non-
+    # admins who type the URL are silently redirected home so we
+    # don't even confirm the surface exists.
+    if st.query_params.get("page") == "admin":
+        if user.is_admin:
+            _admin_sidebar(user)
+            admin_page()
+            return
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+
     which = sidebar_for(user)
     if which == "profile":
         profile_page(user)
-    elif which == "admin" and user.is_admin:
-        admin_page()
     else:
         migration_banner(user)
         dashboard_page(user)
