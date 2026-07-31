@@ -17,7 +17,7 @@ from __future__ import annotations
 import base64
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -1912,6 +1912,103 @@ def admin_page() -> None:
         "Broker secrets remain encrypted — even admins cannot read them "
         "from this UI or by opening the DB file.  Deactivated users cannot log in."
     )
+
+    st.divider()
+    _admin_model_section()
+
+
+def _admin_model_section() -> None:
+    """Model status + on-demand retrain.  Admin-only."""
+    import json as _json
+    from pathlib import Path as _Path
+    from aivora.utils.config import get_config as _get_config
+
+    st.subheader("🧠 Model")
+
+    cfg = _get_config()
+    models_dir = _Path(cfg.paths["models_dir"])
+    up_path = models_dir / "current_up.pkl"
+    down_path = models_dir / "current_down.pkl"
+    status_path = models_dir / "retrain_status.json"
+    lock_path = models_dir / "retrain.lock"
+
+    # ---- Current frozen model info ----
+    cols = st.columns([2, 2, 2])
+    if up_path.exists() and down_path.exists():
+        mt = min(up_path.stat().st_mtime, down_path.stat().st_mtime)
+        frozen_at = datetime.fromtimestamp(mt)
+        age_days = (datetime.now() - frozen_at).total_seconds() / 86400
+        cols[0].metric("Current model frozen",
+                       frozen_at.strftime("%d %b %Y"),
+                       f"{age_days:.1f} days ago")
+    else:
+        cols[0].metric("Current model", "NOT FOUND", "run retrain")
+
+    # ---- Last retrain status ----
+    status = {}
+    if status_path.exists():
+        try:
+            status = _json.loads(status_path.read_text())
+        except Exception:  # noqa: BLE001
+            status = {}
+    state = status.get("state", "never run")
+    tag = status.get("tag", "")
+    if state == "running":
+        started = status.get("started_at", "")
+        cols[1].metric("Retrain state", "🟡 RUNNING", started)
+    elif state == "success":
+        finished = status.get("finished_at", "")
+        cols[1].metric("Retrain state", "🟢 SUCCESS", f"{tag} · {finished}")
+    elif state == "failed":
+        cols[1].metric("Retrain state", "🔴 FAILED",
+                       (status.get("error") or "")[:40])
+    else:
+        cols[1].metric("Retrain state", state, tag)
+
+    # ---- Market-hours guard ----
+    now = _now_ist()
+    in_market = (now.weekday() < 5
+                 and now.time() >= dt_time(9, 15)
+                 and now.time() <= dt_time(15, 30))
+    cols[2].metric("Market status",
+                   "🔴 OPEN — retrain blocked" if in_market else "🟢 CLOSED",
+                   "safe to retrain" if not in_market else "wait for 15:30")
+
+    # ---- Retrain button ----
+    running = state == "running" or lock_path.exists()
+    if in_market:
+        st.info("Retrain is disabled during market hours (09:15–15:30 IST) "
+                "so the frozen model isn't hot-swapped underneath an open "
+                "position.  Come back after 15:30 or on a weekend.")
+        return
+    if running:
+        st.warning("A retrain is currently in progress. This section "
+                   "will update automatically once it finishes "
+                   "(refresh every ~30s).")
+        return
+
+    ver = int(st.session_state.get("_retrain_ver", 0))
+    typed = st.text_input(
+        "Type RETRAIN to confirm — this takes ~5-10 minutes and hot-swaps "
+        "the frozen UP/DOWN pair used by every live tick.",
+        key=f"_retrain_txt_v{ver}",
+    )
+    if typed.strip() == "RETRAIN":
+        try:
+            import subprocess as _sp
+            # Fire-and-forget: the wrapper writes retrain_status.json
+            # as it progresses so this page can poll it.  We do NOT
+            # block the dashboard.
+            _sp.Popen(
+                [sys.executable, "-m", "scripts.monthly_retrain",
+                 "--tag", "manual"],
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, close_fds=True,
+            )
+            st.session_state["_retrain_ver"] = ver + 1
+            st.success("Retrain kicked off — check back in a few minutes.")
+            st.rerun()
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Failed to spawn retrain: {exc}")
 
 
 def migration_banner(user: user_mod.User) -> None:
