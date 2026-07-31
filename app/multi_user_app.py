@@ -1145,6 +1145,56 @@ def _dashboard_autorefresh() -> None:
         pass
 
 
+_LIVE_CAP_SYNC_TTL_SEC = 60.0
+
+
+def _sync_live_capital_if_stale(user_id: int, portfolio) -> None:
+    """Pull Zerodha available cash and set it as the live portfolio's
+    initial_capital, but only when the user has not yet placed a live
+    trade.  Cached per browser tab for _LIVE_CAP_SYNC_TTL_SEC so the
+    30s auto-refresh doesn't hammer Kite's margins endpoint.
+
+    Failures are swallowed — the user just keeps seeing the stale
+    number until the next successful sync.  The sidebar's Capital &
+    risk section will show whatever's currently in the DB.
+    """
+    from time import monotonic
+    cache_key = f"_live_cap_synced_at_{user_id}"
+    last = st.session_state.get(cache_key)
+    if last is not None and (monotonic() - float(last)) < _LIVE_CAP_SYNC_TTL_SEC:
+        return
+    try:
+        state = portfolio.load()
+        if any(True for _ in state.get("trades", [])):
+            # Trades already exist — set_initial_capital would raise
+            # anyway; stop trying so we don't spam warnings.
+            st.session_state[cache_key] = monotonic()
+            return
+        z = broker_mod.get(user_id, "ZERODHA")
+        if not z or not z.access_token or not z.api_key:
+            return
+        from aivora.live.kite_client import KiteClient
+        from aivora.utils.config import KiteCredentials
+        k = KiteClient(creds=KiteCredentials(
+            api_key=z.api_key, api_secret=z.api_secret or "",
+            access_token=z.access_token, user_id=z.client_id or "",
+        ))
+        cash = float(k.available_funds())
+        if cash <= 0:
+            return
+        current_init = float(state.get("initial_capital", 0.0) or 0.0)
+        if abs(cash - current_init) < 0.01:
+            # Already in sync — nothing to do.
+            st.session_state[cache_key] = monotonic()
+            return
+        portfolio.set_initial_capital(cash)
+    except Exception:  # noqa: BLE001
+        # Never crash the dashboard because of a background sync.
+        pass
+    finally:
+        st.session_state[cache_key] = monotonic()
+
+
 def _plotly_dark_layout(fig: go.Figure, height: int = 320) -> None:
     """Apply the shared dark theme to a plotly figure."""
     fig.update_layout(
@@ -1571,6 +1621,16 @@ def dashboard_page(user: user_mod.User) -> None:
 
     mode = st.session_state.get("mode", "paper")
     portfolio = pf_mod.UserPortfolio(user.id, mode)
+
+    # Live mode: silently sync initial_capital from Zerodha whenever
+    # the user has no live trades yet.  Prevents a stale ₹100k default
+    # from persisting after they fund the broker account.  Skipped once
+    # trading has started (otherwise the reset would erase in-progress
+    # P&L bookkeeping).  Cached for 60s per browser tab so 30s auto-
+    # refreshes don't hammer Kite.
+    if mode == "live":
+        _sync_live_capital_if_stale(user.id, portfolio)
+
     s = portfolio.summary()
     state = portfolio.load()
 
