@@ -1148,26 +1148,6 @@ def _dashboard_autorefresh() -> None:
 _LIVE_CAP_SYNC_TTL_SEC = 60.0
 
 
-def _disable_other_mode(user_id: int, this_mode: str) -> bool:
-    """Turn OFF the master_switch of the mode that is NOT ``this_mode``.
-
-    Paper and live have separate portfolio rows (each with their own
-    master_switch); the worker treats every row with master_switch=1
-    as an active job.  Without this, enabling live leaves paper still
-    running in parallel and both fill up the event log at the same
-    5-min cadence — confusing at best, dangerous if the user thinks
-    they've stopped paper trading.  Returns True if something was
-    actually flipped, so the caller can surface a "Paper auto-off"
-    message.
-    """
-    other = "live" if this_mode == "paper" else "paper"
-    other_pf = pf_mod.UserPortfolio(user_id, other)
-    if other_pf.load().get("master_switch"):
-        other_pf.set_master_switch(False)
-        return True
-    return False
-
-
 def _sync_live_capital_if_stale(user_id: int, portfolio) -> None:
     """Pull Zerodha available cash and set it as the live portfolio's
     initial_capital, but only when the user has not yet placed a live
@@ -1741,19 +1721,17 @@ def dashboard_page(user: user_mod.User) -> None:
                            "keeping current initial capital.")
 
             portfolio.set_master_switch(True)
-            paper_was_on = _disable_other_mode(user.id, "live")
             st.session_state["_confirm_live"] = False
             # Bump the version so the next confirm modal spawns a fresh
             # text_input with no leftover value from this cycle.
             st.session_state["_confirm_ver"] = confirm_ver + 1
-            paper_suffix = " Paper mode auto-disabled." if paper_was_on else ""
             if cap_msg:
                 if cap_msg.startswith("Initial capital synced"):
-                    st.success(f"Live trading ARMED. {cap_msg}{paper_suffix}")
+                    st.success(f"Live trading ARMED. {cap_msg}")
                 else:
-                    st.warning(f"Live trading ARMED. {cap_msg}{paper_suffix}")
+                    st.warning(f"Live trading ARMED. {cap_msg}")
             else:
-                st.success(f"Live trading ARMED.{paper_suffix}")
+                st.success("Live trading ARMED.")
             st.rerun()
 
     left, right = st.columns([3, 2], gap="large")
@@ -1835,16 +1813,7 @@ def sidebar_for(user: user_mod.User) -> str:
             if mode == "live" and not cur:
                 st.session_state["_confirm_live"] = True
             else:
-                # Enabling (not cur): also disable the other mode so
-                # only one master_switch is ON at a time.  Disabling
-                # (cur): don't touch the other mode.
                 portfolio.set_master_switch(not cur)
-                if not cur:
-                    other_was_on = _disable_other_mode(user.id, mode)
-                    if other_was_on:
-                        other = "live" if mode == "paper" else "paper"
-                        st.toast(f"{other.capitalize()} mode auto-disabled",
-                                 icon="⏸️")
                 st.rerun()
 
         if st.button("🔄 Refresh now", width="stretch", key="_refresh_now",
