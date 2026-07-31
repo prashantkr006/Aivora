@@ -223,14 +223,44 @@ class KiteClient:
     #  Funds
     # =========================================================
     def available_funds(self) -> float:
+        """Best-guess "tradable cash right now" from Kite's margin block.
+
+        Kite exposes a few overlapping fields under ``available``:
+
+            live_balance   — realtime cash + collateral, minus utilised;
+                             what Zerodha's web dashboard shows as
+                             "Margin available".  This is the field
+                             that matches the number the user sees.
+            cash           — cash brought forward from prior-day, does
+                             NOT reflect same-day fund additions right
+                             away.  We saw 0 here even when the user
+                             had funded the account and Zerodha's UI
+                             showed 50k Margin available.
+            opening_balance— 0 on the day the deposit lands.
+
+        We prefer ``live_balance``, then ``cash``, then the top-level
+        ``net`` (kept as a last-ditch fallback since ``net`` includes
+        unrealised P&L on open positions).
+        """
         margins = self._call(self._client().margins, segment="equity")
-        # We treat the "net" cash across equity as the tradable cash.
-        # In practice you'd want to subtract already-blocked margin;
-        # this is the pragmatic first-pass number.
         try:
-            return float(margins["available"]["cash"])
-        except (KeyError, TypeError):
-            return 0.0
+            avail = margins.get("available") or {}
+        except AttributeError:
+            avail = {}
+        for key in ("live_balance", "cash"):
+            try:
+                v = float(avail.get(key) or 0.0)
+                if v > 0:
+                    return v
+            except (TypeError, ValueError):
+                continue
+        try:
+            v = float(margins.get("net") or 0.0)
+            if v > 0:
+                return v
+        except (TypeError, ValueError):
+            pass
+        return 0.0
 
     # =========================================================
     #  Orders — LIVE ONLY

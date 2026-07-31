@@ -1779,15 +1779,29 @@ def sidebar_for(user: user_mod.User) -> str:
     # Dashboard-specific sidebar controls
     st.sidebar.divider()
 
+    # Persist mode across browser refreshes via URL query param
+    # (st.session_state alone is wiped on F5).  Priority on load:
+    # 1) session_state (in-tab, respects the user's current click),
+    # 2) URL param (survives refresh),
+    # 3) default "paper".
+    current_mode = st.session_state.get("mode")
+    if current_mode not in ("paper", "live"):
+        qp = st.query_params.get("mode")
+        current_mode = qp if qp in ("paper", "live") else "paper"
+        st.session_state["mode"] = current_mode
+
     mode = st.sidebar.radio(
         "Trading mode",
         ["paper", "live"],
-        index=(0 if st.session_state.get("mode", "paper") == "paper" else 1),
+        index=(0 if current_mode == "paper" else 1),
         format_func=lambda m: "📊 Paper" if m == "paper" else "💰 Live",
         horizontal=True,
     )
     if mode != st.session_state.get("mode"):
         st.session_state["mode"] = mode
+    # Mirror to URL so a browser refresh restores the same mode.
+    if st.query_params.get("mode") != mode:
+        st.query_params["mode"] = mode
 
     portfolio = pf_mod.UserPortfolio(user.id, mode)
     s = portfolio.summary()
