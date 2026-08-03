@@ -520,14 +520,27 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
 
     # Single, human-readable summary of the tick.  One entry per tick
     # (not two like before) — keeps the event log signal-dense.
-    if actions:
-        entered_bits = []
-        for a in actions:
-            sym = a.get("symbol", "?")
-            side = a.get("side", "?")
-            side_txt = "CALL" if side == "CE" else "PUT"
-            entered_bits.append(f"{sym} {side_txt}")
-        headline = "🚀 " + ", ".join(entered_bits) + " — trade opened"
+    def _label(a: Dict) -> str:
+        side_txt = "CALL" if a.get("side") == "CE" else "PUT"
+        return f"{a.get('symbol', '?')} {side_txt}"
+
+    # An entry that was attempted is not an entry that happened.  This used
+    # to build the headline from every action regardless of whether the
+    # order actually filled, so a rejected live order still reported
+    # "trade opened" — e.g. an order refused for a missing IP whitelist was
+    # logged as a success on every retry while the book stayed empty.
+    opened = [a for a in actions
+              if a.get("entered_live") or a.get("entered_paper")]
+    attempted = [a for a in actions if a not in opened]
+
+    if opened:
+        headline = "🚀 " + ", ".join(_label(a) for a in opened) + " — trade opened"
+        if attempted:
+            headline += ("  |  ⚠️ not filled: "
+                         + ", ".join(_label(a) for a in attempted))
+    elif attempted:
+        headline = ("⚠️ " + ", ".join(_label(a) for a in attempted)
+                    + " — entry attempted but NOT filled (see error above)")
     else:
         headline = f"✅ {hhmm} — checked, nothing to trade"
     portfolio.append_log(
