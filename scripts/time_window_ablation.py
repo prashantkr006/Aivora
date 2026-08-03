@@ -67,9 +67,11 @@ def _summarise(csv: Path, capital: float) -> dict:
         float(monthly_ret.mean() / monthly_ret.std() * np.sqrt(12))
         if monthly_ret.std() and not np.isnan(monthly_ret.std()) else 0.0
     )
+    # Against ``capital``, not the running peak — see _summarise in
+    # aivora/backtest/backtester.py.  Month-end series, so this is a floor.
     cum = monthly.cumsum() + capital
     peak = cum.cummax()
-    dd = (cum - peak) / peak
+    dd = (cum - peak) / capital
     return {
         "total_pnl": float(monthly.sum()),
         "total_trades": int(df["trades"].sum()),

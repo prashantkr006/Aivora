@@ -402,8 +402,27 @@ def _summarise(trades: pd.DataFrame, capital: float) -> Dict[str, float]:
         }
     pnl = trades["pnl"].astype(float)
     cum = pnl.cumsum() + capital
-    peak = cum.cummax()
-    drawdown = (cum - peak) / peak
+    # The equity curve starts at ``capital``, so the running peak can never
+    # be below it.  Plain cummax() starts from the equity *after* the first
+    # trade, which silently excluded an opening losing run from the drawdown.
+    peak = np.maximum(cum.cummax(), capital)
+    # Drawdown is expressed against ``capital`` — the base the strategy
+    # actually risks — not against the running peak.
+    #
+    # Position size is fixed: lots come from ``risk_per_trade_pct * capital``
+    # with ``capital`` constant, so rupee P&L per trade does not grow as
+    # profits accumulate. Dividing the dip by a peak that compounds therefore
+    # shrinks the reported drawdown purely as a function of how well the
+    # strategy did — the better it performed, the smaller its "risk" looked.
+    # Measured on the production config this understated the drawdown by
+    # 12.1x (-0.08% reported vs -0.93% real).
+    #
+    # Every other metric here (return_pct, Sharpe, monthly returns) already
+    # divides by ``capital``; this line was the only one out of step. Using a
+    # positive constant also keeps the ratio meaningful if equity goes
+    # negative, where dividing by ``peak`` produced values like -215%.
+    drawdown_rupees = cum - peak
+    drawdown = drawdown_rupees / capital
 
     # Daily P&L → annualised Sharpe.
     daily = trades.assign(day=trades["datetime"].dt.date).groupby("day")["pnl"].sum()
@@ -437,6 +456,7 @@ def _summarise(trades: pd.DataFrame, capital: float) -> Dict[str, float]:
         "win_rate": float((pnl > 0).mean()),
         "sharpe": sharpe,
         "max_drawdown": float(drawdown.min()),
+        "max_drawdown_rupees": float(drawdown_rupees.min()),
         "return_pct": float(pnl.sum() / capital),
         "avg_monthly_return_pct": avg_monthly,
         "monthly_std_pct": std_monthly,

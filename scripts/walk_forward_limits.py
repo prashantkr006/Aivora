@@ -167,6 +167,7 @@ def _run_one_fold(
     probs = bin_mod.predict_3class_from_binary(up_model, down_model, splits.X_test)
 
     rows: List[Dict] = []
+    trade_frames: List[pd.DataFrame] = []
     for lim in limits:
         overrides = dict(VARIANT_18_VOL_OFF)
         overrides["max_trades_per_day"] = int(lim)
@@ -192,7 +193,16 @@ def _run_one_fold(
             "gross_pnl": float(trades["gross_pnl"].astype(float).sum()),
             "costs": float(trades["costs"].astype(float).sum()),
         })
-    return rows
+        # Keep every trade, tagged with its fold and limit.  Monthly
+        # aggregates cannot recover intra-month drawdown: on a comparable
+        # dataset the month-end series showed 0.00% while the trade-level
+        # series showed -4.26%.  Without this the true risk of a run is
+        # unrecoverable once the run finishes.
+        tf = trades.copy()
+        tf.insert(0, "test_month", str(test_month))
+        tf.insert(1, "limit", int(lim))
+        trade_frames.append(tf)
+    return rows, trade_frames
 
 
 # =============================================================
@@ -220,9 +230,13 @@ def _summarise(fold_rows: List[Dict], capital: float) -> Dict[str, float]:
         float(monthly_ret.mean() / monthly_ret.std() * np.sqrt(12))
         if monthly_ret.std() and not np.isnan(monthly_ret.std()) else 0.0
     )
+    # Against ``capital``, not the running peak — see _summarise in
+    # aivora/backtest/backtester.py for why.  Note this is a MONTH-END
+    # series, so it is a floor: intra-month dips are invisible here.  The
+    # per-trade ledger written alongside is what gives the true figure.
     cum = monthly.cumsum() + capital
     peak = cum.cummax()
-    drawdown = (cum - peak) / peak
+    drawdown = (cum - peak) / capital
     max_dd = float(drawdown.min()) if not drawdown.empty else 0.0
     win_rate = (wins / trades) if trades else 0.0
     profitable_months = int((monthly > 0).sum())
@@ -328,11 +342,13 @@ def main() -> int:
     logging.getLogger("aivora.backtest.backtester").setLevel(logging.WARNING)
 
     per_fold_rows: List[Dict] = []
+    all_trades: List[pd.DataFrame] = []
     for i, month in enumerate(test_months, start=1):
         log.info("=== Fold %d/%d — test month %s ===", i, len(test_months), month)
-        rows = _run_one_fold(df_all, feat_cols, month, args.limits)
+        rows, trade_frames = _run_one_fold(df_all, feat_cols, month, args.limits)
         if rows:
             per_fold_rows.extend(rows)
+        all_trades.extend(trade_frames)
 
     if not per_fold_rows:
         log.error("No fold produced results.")
@@ -345,6 +361,14 @@ def main() -> int:
     csv_path = reports_dir / f"walk_forward_2026_comparison{suffix}.csv"
     df_out.to_csv(csv_path, index=False)
     log.info("Wrote per-fold rows → %s", csv_path)
+
+    # Per-trade ledger — the only thing from which a true drawdown can be
+    # reconstructed after the fact.
+    if all_trades:
+        trades_path = reports_dir / f"walk_forward_trades{suffix}.csv"
+        df_trades = pd.concat(all_trades, ignore_index=True)
+        df_trades.to_csv(trades_path, index=False)
+        log.info("Wrote %d individual trades → %s", len(df_trades), trades_path)
 
     # Aggregate per limit.
     agg: Dict[int, Dict] = {}
