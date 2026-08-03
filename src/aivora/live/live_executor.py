@@ -24,7 +24,7 @@ from ..utils.config import get_config
 from ..utils.logger import get_logger
 from .kite_client import KiteClient
 from .portfolio import Portfolio, Trade, make_trade_id
-from .safety import assert_can_trade_live
+from .safety import assert_can_exit_live, assert_can_trade_live
 
 log = get_logger(__name__)
 
@@ -67,7 +67,7 @@ def open_live_trade(
 
     Returns the Trade on success, None on rejection or timeout.
     """
-    assert_can_trade_live(portfolio)
+    assert_can_trade_live(portfolio, kite)
     if not is_trading_day(entry_time.date()):
         log.warning("Not a trading day — refusing live order")
         return None
@@ -142,7 +142,10 @@ def close_live_trade(
     fill_timeout_sec: int = 20,
 ) -> None:
     """Send a LIMIT SELL close and reconcile the fill into the trade."""
-    assert_can_trade_live(portfolio)
+    # Exit gates only — see assert_can_exit_live.  Using the entry check here
+    # meant a breached daily-loss cap, a closed entry window or a flipped
+    # master switch could all prevent closing an open position.
+    assert_can_exit_live(portfolio, kite)
     lots = int(trade_dict["lots"])
     lot_size = int(trade_dict["lot_size"])
     qty = lots * lot_size

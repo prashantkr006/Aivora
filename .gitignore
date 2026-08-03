@@ -29,3 +29,6 @@ reports/*
 .vscode/
 .DS_Store
 Thumbs.db
+# ---------- Swing module artefacts ----------
+data/swing/*
+!data/swing/.gitkeep

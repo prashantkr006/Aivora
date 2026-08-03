@@ -106,17 +106,26 @@ SCHEMA_USER_EVENTS = """
 CREATE TABLE IF NOT EXISTS user_events (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mode     TEXT,
     ts       TEXT    NOT NULL,
     level    TEXT    NOT NULL,
     msg      TEXT    NOT NULL
 );
 """
 
+# Columns added after a table first shipped.  CREATE TABLE IF NOT EXISTS
+# will not add them to an existing database, so they are applied here,
+# idempotently, on every init.  Existing rows keep NULL.
+_COLUMN_MIGRATIONS = [
+    ("user_events", "mode", "TEXT"),
+]
+
 SCHEMA_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_user_brokers_user ON user_brokers(user_id);",
     "CREATE INDEX IF NOT EXISTS idx_user_trades_user  ON user_trades(user_id);",
     "CREATE INDEX IF NOT EXISTS idx_user_trades_mode  ON user_trades(user_id, mode);",
     "CREATE INDEX IF NOT EXISTS idx_user_events_user  ON user_events(user_id, ts);",
+    "CREATE INDEX IF NOT EXISTS idx_user_events_mode  ON user_events(user_id, mode, id);",
 ]
 
 
@@ -161,6 +170,11 @@ def init_db(db_path: Path | None = None) -> None:
         for stmt in (SCHEMA_USERS, SCHEMA_USER_BROKERS, SCHEMA_USER_PORTFOLIOS,
                      SCHEMA_USER_TRADES, SCHEMA_USER_EVENTS):
             conn.execute(stmt)
+        for table, col, coltype in _COLUMN_MIGRATIONS:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
+                log.info("webapp DB: added %s.%s", table, col)
         for idx in SCHEMA_INDEXES:
             conn.execute(idx)
     if resolved not in _INIT_DONE:

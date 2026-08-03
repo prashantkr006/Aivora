@@ -1817,6 +1817,22 @@ def sidebar_for(user: user_mod.User) -> str:
                 portfolio.set_master_switch(not cur)
                 st.rerun()
 
+        # Both switches at a glance.  The button above only ever toggles the
+        # mode currently selected, so it was easy to believe both were running
+        # when only one was — and the worker only schedules a tick for a mode
+        # whose switch is ON.
+        _both = []
+        for _m in ("paper", "live"):
+            try:
+                _on = pf_mod.UserPortfolio(user.id, _m).summary()["master_switch"]
+            except Exception:  # noqa: BLE001
+                continue
+            _dot = "🟢" if _on else "⚪"
+            _lbl = f"**{_m}**" if _m == mode else _m
+            _both.append(f"{_dot} {_lbl} {'ON' if _on else 'OFF'}")
+        if _both:
+            st.caption("Engines: " + " &nbsp;·&nbsp; ".join(_both))
+
         if st.button("🔄 Refresh now", width="stretch", key="_refresh_now",
                      help="Fetch latest candles and run one inference tick."):
             with st.spinner("Fetching…"):

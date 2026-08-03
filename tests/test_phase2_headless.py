@@ -85,7 +85,19 @@ def test_04_session_signing_roundtrip(fresh_user):
     uid = sessions.verify(token)
     assert uid == fresh_user.id
     # Tampered token must fail.
-    assert sessions.verify(token[:-1] + ("A" if token[-1] != "A" else "B")) is None
+    #
+    # Tamper a character in the MIDDLE of the signature, not the last one.
+    # The final base64 character carries padding bits, so e.g. 'A'->'B' flips
+    # only a pad bit and decodes to the identical HMAC — a no-op that itsdangerous
+    # rightly still accepts.  That made this assertion fail for roughly 6% of
+    # user ids (measured: 244/244 tokens ending in 'A' went undetected, 0/3756
+    # otherwise).  A middle character has all six bits significant, so the
+    # decoded signature always changes.
+    sig_start = token.rindex(".") + 1
+    mid = sig_start + (len(token) - sig_start) // 2
+    tampered = token[:mid] + ("A" if token[mid] != "A" else "B") + token[mid + 1:]
+    assert tampered != token
+    assert sessions.verify(tampered) is None
     _record("T04", "PASS",
             "sessions.mint→verify roundtrips; tampered token rejected. "
             "Full 'browser refresh keeps user logged in' verified indirectly — "

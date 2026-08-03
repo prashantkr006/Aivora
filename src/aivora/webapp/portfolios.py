@@ -117,13 +117,22 @@ class UserPortfolio:
         return [dict(r) for r in rows]
 
     def _load_events(self, conn, limit: int = 200) -> List[Dict[str, str]]:
+        """Events for THIS portfolio's mode.
+
+        Paper and live tick independently and used to write into one
+        undifferentiated stream, which made it impossible to tell which
+        mode produced a given line — the reason a missing paper entry
+        looked identical to a paper entry that never ran.  Rows written
+        before the ``mode`` column existed have NULL and are still shown,
+        so history is not lost.
+        """
         rows = conn.execute(
             """
-            SELECT ts, level, msg FROM user_events
-            WHERE user_id = ?
+            SELECT ts, level, msg, mode FROM user_events
+            WHERE user_id = ? AND (mode = ? OR mode IS NULL)
             ORDER BY id DESC LIMIT ?
             """,
-            (self.user_id, limit),
+            (self.user_id, self.mode, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -316,8 +325,9 @@ class UserPortfolio:
         """
         with db_mod.connect() as conn:
             conn.execute(
-                "INSERT INTO user_events (user_id, ts, level, msg) VALUES (?, ?, ?, ?)",
-                (self.user_id,
+                "INSERT INTO user_events (user_id, mode, ts, level, msg) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (self.user_id, self.mode,
                  datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
                  level, msg),
             )
