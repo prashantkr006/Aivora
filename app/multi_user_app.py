@@ -1746,6 +1746,85 @@ def dashboard_page(user: user_mod.User) -> None:
 # =============================================================
 #  Sidebar
 # =============================================================
+def _emergency_square_off(user: user_mod.User, portfolio, mode: str) -> None:
+    """Close every open position — for real, when the portfolio is live.
+
+    This used to mark trades closed in the database without sending a single
+    order to the broker.  In paper that is correct; in live it silently
+    detached the book from reality: AiVora showed the position exited while
+    the broker still held it, and because the trade was flagged closed the
+    position tracker stopped monitoring it — no stop loss, no target, no
+    horizon exit.  The position was left completely unmanaged.
+
+    Live now routes through close_live_trade(), which only marks a trade
+    closed after the exit order actually fills COMPLETE.  Anything that does
+    not fill stays open in the book and is reported, so the discrepancy is
+    visible rather than hidden.
+    """
+    now = datetime.now()
+    state = portfolio.load()
+    open_trades = [t for t in state["trades"] if not t.get("exit_time")]
+
+    if not open_trades:
+        st.sidebar.info("No open positions.")
+        return
+
+    if mode != "live":
+        for t in open_trades:
+            current = float(t.get("current_premium") or t["entry_premium"])
+            lots = int(t["lots"]); lot_size = int(t["lot_size"])
+            gross = (current - float(t["entry_premium"])) * lots * lot_size
+            portfolio.close_trade(
+                trade_id=t["trade_id"], exit_time=now,
+                exit_premium=current, exit_reason="emergency",
+                gross_pnl=gross, costs=0.0,
+            )
+        st.sidebar.warning(f"Closed {len(open_trades)} paper position(s).")
+        return
+
+    # ---- live: orders must actually reach the broker ----
+    z = broker_mod.get(user.id, "ZERODHA")
+    if not z or not z.api_key or not z.access_token:
+        st.sidebar.error(
+            f"Kite not connected — cannot square off {len(open_trades)} LIVE "
+            "position(s). Exit them manually at your broker, now."
+        )
+        return
+
+    try:
+        from aivora.webapp.trading_engine import _build_kite_from_broker
+        kite = _build_kite_from_broker(z)
+        from aivora.live.live_executor import close_live_trade
+    except Exception as exc:  # noqa: BLE001
+        st.sidebar.error(
+            f"Could not reach the broker ({exc}) — exit your "
+            f"{len(open_trades)} LIVE position(s) manually."
+        )
+        return
+
+    for t in open_trades:
+        try:
+            close_live_trade(portfolio, kite, t, now, "emergency")
+        except Exception as exc:  # noqa: BLE001
+            portfolio.append_log(
+                f"Emergency square-off failed for {t.get('symbol')}: {exc}", "error"
+            )
+
+    # Trust the book, not the loop: close_live_trade only closes on a
+    # confirmed fill, so re-read to see what genuinely went through.
+    still_open = [t for t in portfolio.load()["trades"] if not t.get("exit_time")]
+    closed = len(open_trades) - len(still_open)
+
+    if not still_open:
+        st.sidebar.warning(f"Squared off {closed} live position(s).")
+    else:
+        syms = ", ".join(f"{t.get('symbol')} {t.get('side')}" for t in still_open)
+        st.sidebar.error(
+            f"Closed {closed}, but {len(still_open)} did NOT exit: {syms}. "
+            "These are still open at your broker — exit them manually."
+        )
+
+
 def sidebar_for(user: user_mod.User) -> str:
     """Return which page to render (dashboard / profile / admin)."""
     initials = _initials(user.display_name or user.email)
@@ -1869,24 +1948,7 @@ def sidebar_for(user: user_mod.User) -> str:
     st.sidebar.divider()
     if st.sidebar.button("🛑 Emergency square off", width="stretch",
                          type="primary", key="_emergency_off"):
-        state = portfolio.load()
-        now = datetime.now()
-        n = 0
-        for t in state["trades"]:
-            if t.get("exit_time"):
-                continue
-            current = float(t.get("current_premium") or t["entry_premium"])
-            lots = int(t["lots"]); lot_size = int(t["lot_size"])
-            gross = (current - float(t["entry_premium"])) * lots * lot_size
-            portfolio.close_trade(
-                trade_id=t["trade_id"],
-                exit_time=now,
-                exit_premium=current,
-                exit_reason="emergency",
-                gross_pnl=gross, costs=0.0,
-            )
-            n += 1
-        st.sidebar.warning(f"Closed {n} position(s).")
+        _emergency_square_off(user, portfolio, mode)
         st.rerun()
 
     st.sidebar.divider()
@@ -1969,6 +2031,7 @@ def admin_page() -> None:
 
     st.divider()
     _admin_model_section()
+
 
 
 def _admin_model_section() -> None:
