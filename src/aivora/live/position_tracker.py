@@ -32,9 +32,26 @@ def _minutes(a: datetime, b: datetime) -> float:
     return (a - b).total_seconds() / 60.0
 
 
-def _live_premium(kite: KiteClient, symbol: str, spot_now: float, side: str) -> float:
-    q = kite.atm_option_quote(symbol, spot_now)
-    return float(q["ce_ltp"] if side == "CE" else q["pe_ltp"])
+def _live_premium(kite: KiteClient, trade: dict, spot_now: float) -> float:
+    """Current price of the contract this trade actually holds.
+
+    This used to call atm_option_quote(symbol, spot_now), which picks the
+    strike that is at-the-money *right now* — a different option from the
+    one we bought as soon as the index moves.  The consequences were not
+    cosmetic: this value feeds _decide_exit, so take-profit, stop-loss and
+    the trailing stop were all being judged against a contract we do not
+    own.  Observed in production: a position genuinely +₹2,435 was marked
+    at +₹692, so the target could not fire.
+
+    Trades opened before the tradingsymbol was recorded fall back to the
+    old derivation, using the ENTRY spot so at least the strike matches.
+    """
+    ts = trade.get("tradingsymbol")
+    if ts:
+        return kite.ltp_for(ts)
+    entry_spot = float(trade.get("entry_spot") or spot_now)
+    q = kite.atm_option_quote(trade["symbol"], entry_spot)
+    return float(q["ce_ltp"] if trade["side"] == "CE" else q["pe_ltp"])
 
 
 def _decide_exit(
@@ -142,7 +159,7 @@ def tick(
         # pulls a fresh quote (rate-limited by KiteClient).
         if live and kite is not None:
             try:
-                current = _live_premium(kite, sym, spot, t["side"])
+                current = _live_premium(kite, t, spot)
             except Exception as exc:
                 log.warning("live quote failed for %s (%s): %s", sym, t["side"], exc)
                 current = float(t.get("current_premium") or t["entry_premium"])
@@ -206,7 +223,7 @@ def emergency_square_off(
         spot = float(spot_prices.get(sym) or t.get("entry_spot") or 0.0)
         if live and kite is not None:
             try:
-                current = _live_premium(kite, sym, spot, t["side"])
+                current = _live_premium(kite, t, spot)
             except Exception:
                 current = float(t.get("current_premium") or t["entry_premium"])
             from .live_executor import close_live_trade

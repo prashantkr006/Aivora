@@ -219,6 +219,28 @@ class KiteClient:
             "pe_oi": float(pe_q.get("oi") or 0.0),
         }
 
+    def ltp_for(self, tradingsymbol: str) -> float:
+        """Last traded price for one exact contract.
+
+        Marking a position must ask about the contract we actually hold.
+        Deriving it from the current spot instead returns whichever strike
+        happens to be at-the-money now, which is a different option as soon
+        as the market moves.
+        """
+        q = self._call(self._client().quote, [tradingsymbol])
+        row = q.get(tradingsymbol) or {}
+        return float(row.get("last_price") or 0.0)
+
+    def positions(self) -> Dict[str, Any]:
+        """Broker's own view of open positions.
+
+        The authoritative record of what we hold and what it is worth —
+        quantity, average price, last price and P&L straight from Kite.
+        Used to reconcile our book against the account rather than
+        inferring it.
+        """
+        return self._call(self._client().positions)
+
     # =========================================================
     #  Funds
     # =========================================================

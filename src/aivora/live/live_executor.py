@@ -127,6 +127,7 @@ def open_live_trade(
         current_premium=avg_price,
         unrealized_pnl=0.0,
         entry_order_id=order_id,
+        tradingsymbol=tradingsymbol,
         horizon_close_time=(entry_time + timedelta(minutes=5 * horizon)).isoformat(timespec="seconds"),
     )
     portfolio.open_trade(trade)
@@ -150,15 +151,16 @@ def close_live_trade(
     lot_size = int(trade_dict["lot_size"])
     qty = lots * lot_size
 
-    # We need the tradingsymbol we entered with; re-derive from
-    # the current chain (strike/side stable within intraday window).
-    info = kite.atm_option_symbols(
-        trade_dict["symbol"], float(trade_dict["entry_spot"] or 0.0),
-    )
-    ts = info["CE"] if trade_dict["side"] == "CE" else info["PE"]
-    # Pull latest quote to size the LIMIT price fairly.
-    q = kite.atm_option_quote(trade_dict["symbol"], float(trade_dict["entry_spot"] or 0.0))
-    ltp = float(q["ce_ltp"] if trade_dict["side"] == "CE" else q["pe_ltp"])
+    # Sell exactly what we bought.  Trades opened before tradingsymbol was
+    # recorded fall back to re-deriving it from the ENTRY spot, which
+    # reproduces the strike chosen at entry.
+    ts = trade_dict.get("tradingsymbol")
+    if not ts:
+        info = kite.atm_option_symbols(
+            trade_dict["symbol"], float(trade_dict["entry_spot"] or 0.0),
+        )
+        ts = info["CE"] if trade_dict["side"] == "CE" else info["PE"]
+    ltp = kite.ltp_for(ts)
     limit_price = _round_to_tick(ltp * 0.999)   # cross slightly the other way
 
     log.warning("LIVE placing SELL %s qty=%d px=%.2f", ts, qty, limit_price)

@@ -70,6 +70,11 @@ class Trade:
     # Live-order metadata (paper leaves these None).
     entry_order_id: Optional[str] = None
     exit_order_id: Optional[str] = None
+    # The exact contract this position is in, e.g. "NFO:BANKNIFTY26AUG57700CE".
+    # Without it the tracker had to re-derive the strike from the *current*
+    # spot, which drifts to a different option as the market moves — it was
+    # marking positions against a contract we do not hold.
+    tradingsymbol: Optional[str] = None
     # For live-inference tick monitoring.
     horizon_close_time: Optional[str] = None   # when to force-exit if TP/SL don't hit
     # Populated on close.

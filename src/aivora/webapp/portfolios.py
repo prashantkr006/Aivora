@@ -201,13 +201,14 @@ class UserPortfolio:
             "user_id", "mode", "trade_id", "entry_time", "symbol", "side",
             "strike", "lots", "lot_size", "entry_premium",
             "current_premium", "entry_spot", "entry_order_id",
-            "horizon_close_time",
+            "horizon_close_time", "tradingsymbol",
         ]
         vals = [
             self.user_id, self.mode, d["trade_id"], d["entry_time"],
             d["symbol"], d["side"], d["strike"], d["lots"], d["lot_size"],
             d["entry_premium"], d["current_premium"], d["entry_spot"],
             d.get("entry_order_id"), d.get("horizon_close_time"),
+            d.get("tradingsymbol"),
         ]
         placeholders = ", ".join(["?"] * len(cols))
         with db_mod.connect() as conn:

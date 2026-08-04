@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS user_events (
 # idempotently, on every init.  Existing rows keep NULL.
 _COLUMN_MIGRATIONS = [
     ("user_events", "mode", "TEXT"),
+    ("user_trades", "tradingsymbol", "TEXT"),
 ]
 
 SCHEMA_INDEXES = [
