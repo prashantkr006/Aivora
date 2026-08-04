@@ -6,8 +6,8 @@ fired. Container restart + no visit = silent trading outage.
 
 This worker is a dedicated container that:
 
-  1. Reads every user_portfolios row with master_switch=1 from the
-     webapp DB on startup.
+  1. Reads every user_portfolios row that either has master_switch=1
+     or still holds an open trade.
   2. Registers a per-user tick with APScheduler (cron: */5, sec=20,
      Asia/Kolkata).
   3. Reruns the discovery every 60s so a user who flips their master
@@ -22,7 +22,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import Set, Tuple
+from typing import Dict, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -39,14 +39,36 @@ log = get_logger("scripts.run_worker")
 _ACTIVE: Set[Tuple[int, str]] = set()
 
 
-def _active_portfolios() -> Set[Tuple[int, str]]:
-    """Read the webapp DB for all portfolios with master_switch=1."""
+def _active_portfolios() -> Dict[Tuple[int, str], bool]:
+    """Portfolios that need a tick: master switch ON **or** holding a position.
+
+    Filtering on master_switch alone stranded open positions.  Turning the
+    switch off is meant to stop new entries, not abandon what is already
+    open — run_user_tick says so itself: it runs the position tracker and
+    only then returns "paused (master switch OFF) ... open trade(s)
+    monitored".  But with no job registered that tick never fired, so a
+    live position left behind an off switch had no stop-loss, no trailing
+    stop and no horizon exit watching it.
+
+    Maps each portfolio to whether its master switch is on, so the log
+    can say which ones are only being monitored.
+    """
     webapp_db.init_db()
     with webapp_db.connect() as c:
         rows = c.execute(
-            "SELECT user_id, mode FROM user_portfolios WHERE master_switch = 1"
+            """
+            SELECT p.user_id, p.mode, p.master_switch
+              FROM user_portfolios p
+             WHERE p.master_switch = 1
+                OR EXISTS (
+                    SELECT 1 FROM user_trades t
+                     WHERE t.user_id = p.user_id
+                       AND t.mode    = p.mode
+                       AND t.exit_time IS NULL
+                )
+            """
         ).fetchall()
-    return {(int(r[0]), str(r[1])) for r in rows}
+    return {(int(r[0]), str(r[1])): bool(r[2]) for r in rows}
 
 
 def _tick_job(user_id: int, mode: str) -> None:
@@ -62,7 +84,7 @@ def _sync(scheduler: BackgroundScheduler) -> None:
     desired = _active_portfolios()
 
     # Add jobs that appeared.
-    for user_id, mode in desired - _ACTIVE:
+    for user_id, mode in set(desired) - _ACTIVE:
         job_id = f"tick-{user_id}-{mode}"
         scheduler.add_job(
             _tick_job, args=[user_id, mode],
@@ -70,10 +92,11 @@ def _sync(scheduler: BackgroundScheduler) -> None:
             id=job_id, replace_existing=True,
             max_instances=1, coalesce=True,
         )
-        log.info("registered tick: user=%s mode=%s", user_id, mode)
+        why = "trading" if desired[(user_id, mode)] else "monitoring open position(s)"
+        log.info("registered tick: user=%s mode=%s (%s)", user_id, mode, why)
 
-    # Remove jobs that disappeared (user turned master switch OFF).
-    for user_id, mode in _ACTIVE - desired:
+    # Remove jobs that disappeared — switch off AND nothing left open.
+    for user_id, mode in _ACTIVE - set(desired):
         job_id = f"tick-{user_id}-{mode}"
         scheduler.remove_job(job_id)
         log.info("unregistered tick: user=%s mode=%s", user_id, mode)
