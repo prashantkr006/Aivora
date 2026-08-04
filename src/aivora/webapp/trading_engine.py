@@ -372,6 +372,17 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
     spot_prices = MarketDataCache.spot_prices()
     report["predictions"] = list(predictions.keys())
 
+    # Reconcile against the account BEFORE anything reads the book. A
+    # position exited by hand at Kite is otherwise still "open" here, and
+    # the tracker would mark it, could fire a stop on it, and would block
+    # a fresh entry in that symbol.
+    if mode == "live":
+        try:
+            from ..live.reconcile import reconcile_live_book
+            report["reconciled"] = reconcile_live_book(portfolio, kite, now)
+        except Exception as exc:  # noqa: BLE001
+            portfolio.append_log(f"reconcile error: {exc}", "error")
+
     # Position tracker: update marks + close any hitting TP/SL/timeout.
     try:
         _tracker.tick(

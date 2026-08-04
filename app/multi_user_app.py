@@ -1795,12 +1795,30 @@ def _emergency_square_off(user: user_mod.User, portfolio, mode: str) -> None:
         from aivora.webapp.trading_engine import _build_kite_from_broker
         kite = _build_kite_from_broker(z)
         from aivora.live.live_executor import close_live_trade
+        from aivora.live.reconcile import reconcile_live_book
     except Exception as exc:  # noqa: BLE001
         st.sidebar.error(
             f"Could not reach the broker ({exc}) — exit your "
             f"{len(open_trades)} LIVE position(s) manually."
         )
         return
+
+    # Sync with the account first. Anything already exited at the broker is
+    # not ours to sell, and sending that order is what made this button
+    # fail before.
+    try:
+        synced = reconcile_live_book(portfolio, kite, now)
+    except Exception:  # noqa: BLE001
+        synced = 0
+    if synced:
+        open_trades = [t for t in portfolio.load()["trades"]
+                       if not t.get("exit_time")]
+        st.sidebar.info(
+            f"{synced} position(s) were already closed at your broker — "
+            "AiVora is now in sync."
+        )
+        if not open_trades:
+            return
 
     # Whatever goes wrong per trade, keep going and keep the reason: the
     # user is standing at the panic button and needs to know what is still
