@@ -72,7 +72,7 @@ def _exit_price(row: dict, trade: dict) -> float:
 
 
 def _close(portfolio, trade: dict, now: datetime, exit_px: float) -> None:
-    from ..backtest.costs import compute_round_trip
+    from ..backtest.costs import compute_round_trip, live_cost_cfg
 
     lots = int(trade["lots"])
     lot_size = int(trade["lot_size"])
@@ -82,7 +82,7 @@ def _close(portfolio, trade: dict, now: datetime, exit_px: float) -> None:
         entry_premium=entry,
         exit_premium=exit_px,
         lots=lots, lot_size=lot_size,
-        cfg=portfolio.load()["settings"],
+        cfg=live_cost_cfg(),
     )
     portfolio.close_trade(
         trade_id=trade["trade_id"],

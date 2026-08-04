@@ -47,7 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from aivora.backtest.costs import compute_round_trip  # noqa: E402
+from aivora.backtest.costs import compute_round_trip, live_cost_cfg  # noqa: E402
 from aivora.live.reconcile import EXIT_REASON  # noqa: E402
 from aivora.utils.config import get_config  # noqa: E402
 from aivora.webapp import db as webapp_db  # noqa: E402
@@ -55,15 +55,14 @@ from aivora.webapp.portfolios import UserPortfolio  # noqa: E402
 
 
 def _cost_cfg(include_slippage: bool) -> dict:
-    """Charge model for a trade that really executed.
-
-    ``slippage_pct`` models bid-ask crossing in the backtest.  A real fill
-    already happened at a real price, so counting it again would invent a
-    cost the broker never charged.  Off unless asked for.
-    """
-    cfg = dict(get_config().raw.get("backtest", {}).get("costs", {}) or {})
-    if not include_slippage:
-        cfg["slippage_pct"] = 0.0
+    """Charge model for a trade that really executed — same one the live
+    closers use, so a repaired row is priced exactly like a fresh one."""
+    cfg = live_cost_cfg()
+    if include_slippage:
+        cfg["slippage_pct"] = float(
+            get_config().raw.get("backtest", {}).get("costs", {})
+            .get("slippage_pct", 0.001)
+        )
     return cfg
 
 

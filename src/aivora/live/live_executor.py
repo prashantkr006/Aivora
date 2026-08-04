@@ -180,13 +180,12 @@ def close_live_trade(
         return
 
     avg = float(final.get("average_price") or limit_price)
-    from ..backtest.costs import compute_round_trip
-    settings = portfolio.load()["settings"]
+    from ..backtest.costs import compute_round_trip, live_cost_cfg
     costs = compute_round_trip(
         entry_premium=float(trade_dict["entry_premium"]),
         exit_premium=avg,
         lots=lots, lot_size=lot_size,
-        cfg=settings,
+        cfg=live_cost_cfg(),
     )
     gross = (avg - float(trade_dict["entry_premium"])) * lots * lot_size
     portfolio.close_trade(

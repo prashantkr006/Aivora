@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
+from ..utils.config import get_config
+
 
 @dataclass
 class RoundTripCosts:
@@ -38,6 +40,28 @@ class RoundTripCosts:
             + self.stamp_duty
             + self.slippage
         )
+
+
+def live_cost_cfg() -> Dict:
+    """Charge schedule for a trade that really executed at the broker.
+
+    Two things this fixes for the live path.
+
+    The cost keys live under ``backtest.costs`` in config.yaml, but the
+    live closers were passing the *portfolio settings* dict as ``cfg``.
+    That dict has none of these keys, so every rate silently fell back to
+    the literal defaults below — including ``slippage_pct``.
+
+    And slippage does not belong here at all.  It models crossing the
+    bid-ask spread, which is a guess the backtest has to make because it
+    never sends an order.  A live fill already happened at a real price:
+    whatever the spread cost, it is inside that price.  Charging it again
+    invents a fee the broker never took, and makes every live trade look
+    worse than it was.
+    """
+    cfg = dict(get_config().raw.get("backtest", {}).get("costs", {}) or {})
+    cfg["slippage_pct"] = 0.0
+    return cfg
 
 
 def compute_round_trip(
