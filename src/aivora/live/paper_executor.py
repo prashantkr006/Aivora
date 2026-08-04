@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ..backtest.costs import compute_round_trip
+from .lot_sizes import lot_size_for
 from ..utils.calendar import is_trading_day
 from ..utils.config import get_config
 from ..utils.logger import get_logger
@@ -73,18 +74,23 @@ def open_paper_trade(
     live_ce_ltp: Optional[float] = None,
     live_pe_ltp: Optional[float] = None,
     entry_prob: Optional[float] = None,
+    kite=None,
 ) -> Trade:
     """Record a paper entry.
 
     If a real live LTP is available (from Kite quote() during
     market hours), use it as the fill price; otherwise fall back
     to the backtest's ATM premium heuristic.
+
+    ``kite`` is used only to read the current lot size.  Paper sizing that
+    uses a different contract size from live is not paper trading of the
+    live system — it is paper trading of a different one.
     """
     if not is_trading_day(entry_time.date()):
         raise RuntimeError(f"{entry_time.date()} is not a trading day")
 
     inst = _instrument_for(symbol)
-    lot_size = int(inst["lot_size"])
+    lot_size = lot_size_for(symbol, kite)
     strike_step = int(inst["strike_step"])
     strike = round(spot / strike_step) * strike_step
 

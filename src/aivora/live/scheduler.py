@@ -180,6 +180,7 @@ def run_tick(portfolio: Portfolio, now: Optional[datetime] = None) -> Dict:
             trade = open_paper_trade(
                 portfolio, sym, side, result.spot_close, now,
                 live_ce_ltp=live_ce, live_pe_ltp=live_pe,
+                kite=kite,          # so paper sizes on the same lot as live
             )
             report["actions"].append({"entered_paper": True, "symbol": sym, "side": side})
     state = portfolio.load()

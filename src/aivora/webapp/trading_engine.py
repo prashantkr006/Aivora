@@ -524,6 +524,7 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
                     portfolio, sym, side, result.spot_close, now,
                     live_ce_ltp=live_ce, live_pe_ltp=live_pe,
                     entry_prob=entry_prob_now,
+                    kite=kite,          # so paper sizes on the same lot as live
                 )
                 actions.append({"entered_paper": True, "symbol": sym, "side": side})
         except Exception as exc:  # noqa: BLE001

@@ -25,13 +25,19 @@ paths:
 
 # ----------- Instruments to trade -------------
 instruments:
+  # lot_size here is only a FALLBACK. Live and paper ask Kite for the
+  # exchange's current value on every entry (see aivora.live.lot_sizes);
+  # these numbers are used when there is no broker to ask — the backtest,
+  # and offline tests. A mismatch is logged, so this cannot drift unnoticed
+  # again: it sat at 75/15 long after NSE moved to 65/30, which halved every
+  # backtested BANKNIFTY P&L and hid that one lot is 43% of capital, not 21%.
   - symbol: NIFTY
     exchange: NSE
-    lot_size: 75                 # NFO lot size (update if exchange revises)
+    lot_size: 65                 # verified against NFO 2026-08-04
     strike_step: 50
   - symbol: BANKNIFTY
     exchange: NSE
-    lot_size: 15
+    lot_size: 30                 # verified against NFO 2026-08-04
     strike_step: 100
 
 market:

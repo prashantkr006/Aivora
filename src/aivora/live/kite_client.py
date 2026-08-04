@@ -201,6 +201,25 @@ class KiteClient:
             "lot_size": int(ce.iloc[0]["lot_size"]),
         }
 
+    def lot_size(self, symbol: str) -> int:
+        """Units in one lot of ``symbol``, at the nearest expiry.
+
+        The exchange's own answer, from the instruments dump this client
+        already caches.  Nearest expiry specifically: when NSE revises a
+        lot size, the new value appears on newly listed expiries first, and
+        the nearest one is what an entry today would actually trade.
+        """
+        nfo = self.instruments("NFO")
+        rows = nfo[nfo["name"] == symbol].copy()
+        if rows.empty:
+            raise RuntimeError(f"Kite: no NFO contracts found for {symbol}")
+        rows["expiry"] = pd.to_datetime(rows["expiry"]).dt.date
+        upcoming = rows[rows["expiry"] >= date.today()]
+        if upcoming.empty:
+            raise RuntimeError(f"No upcoming Kite F&O expiries for {symbol}")
+        nearest = upcoming[upcoming["expiry"] == upcoming["expiry"].min()]
+        return int(nearest.iloc[0]["lot_size"])
+
     def atm_option_quote(self, symbol: str, spot: float) -> Dict[str, Any]:
         """LTP / OI / IV(if available) for the ATM CE + PE."""
         info = self.atm_option_symbols(symbol, spot)
