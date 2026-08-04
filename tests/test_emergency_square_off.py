@@ -77,3 +77,49 @@ def test_button_delegates_to_the_helper():
 
     src = inspect.getsource(m.sidebar_for)
     assert "_emergency_square_off(user, portfolio, mode)" in src
+
+
+# -------------------------------------------------------------------
+#  The handler must survive its own error path
+# -------------------------------------------------------------------
+# Second incident: close_live_trade raised, and the except block called
+# portfolio.append_log — a method the DB-backed UserPortfolio did not have.
+# The AttributeError escaped and took the entire dashboard down, at the
+# exact moment the user was trying to exit a live position.
+
+def test_user_portfolio_answers_to_append_log():
+    """The engine layer calls append_log; UserPortfolio must accept it."""
+    from aivora.webapp.portfolios import UserPortfolio
+
+    assert hasattr(UserPortfolio, "append_log")
+
+
+def test_append_log_forwards_to_log_event():
+    from aivora.webapp.portfolios import UserPortfolio
+
+    seen = []
+    up = UserPortfolio.__new__(UserPortfolio)
+    up.log_event = lambda msg, level="info": seen.append((msg, level))
+    up.append_log("boom", "error")
+    assert seen == [("boom", "error")]
+
+
+def test_a_failing_log_cannot_kill_the_dashboard():
+    """Even if logging itself explodes, the button must keep going."""
+    src = _source()
+    live = src.split('if mode != "live":')[1].split("return", 1)[1]
+    handler = live.split("except Exception")[1]
+    assert handler.count("try:") >= 1, (
+        "the error handler's own logging must be guarded"
+    )
+
+
+def test_failure_reasons_reach_the_user():
+    """Standing at the panic button, the user needs to know what is still
+    exposed *and why* — not just a count."""
+    src = _source()
+    assert "failures" in src
+    assert re.search(r"failures\.append", src)
+    assert re.search(r"for f in failures", src), (
+        "collected reasons must actually be rendered"
+    )

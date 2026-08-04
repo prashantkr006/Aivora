@@ -346,6 +346,21 @@ class UserPortfolio:
                 (self.user_id, self.user_id, int(retain_last)),
             )
 
+    def append_log(self, msg: str, level: str = "info") -> None:
+        """Alias for :meth:`log_event` — the file-based Portfolio's name.
+
+        The engine layer (live_executor, position_tracker, safety) is shared
+        between the single-user file Portfolio and this DB-backed one, and it
+        calls ``append_log``.  Only trading_engine wrapped this class to
+        bridge the two names, so any *other* caller that handed a raw
+        UserPortfolio to that code hit AttributeError — which is exactly how
+        the emergency square-off button crashed the whole dashboard: the
+        error path itself called append_log.
+
+        Defining the alias here means every caller works, wrapped or not.
+        """
+        self.log_event(msg, level)
+
     def prune_events(self, retain_last: int = 500) -> int:
         """One-shot cleanup helper — returns rows deleted."""
         with db_mod.connect() as conn:

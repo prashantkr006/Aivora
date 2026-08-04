@@ -1802,13 +1802,23 @@ def _emergency_square_off(user: user_mod.User, portfolio, mode: str) -> None:
         )
         return
 
+    # Whatever goes wrong per trade, keep going and keep the reason: the
+    # user is standing at the panic button and needs to know what is still
+    # exposed and why.  Nothing in here may raise — this handler taking the
+    # dashboard down with it is how the button failed before.
+    failures = []
     for t in open_trades:
+        label = f"{t.get('symbol')} {t.get('side')}"
         try:
             close_live_trade(portfolio, kite, t, now, "emergency")
         except Exception as exc:  # noqa: BLE001
-            portfolio.append_log(
-                f"Emergency square-off failed for {t.get('symbol')}: {exc}", "error"
-            )
+            failures.append(f"{label}: {exc}")
+            try:
+                portfolio.append_log(
+                    f"Emergency square-off failed for {label}: {exc}", "error"
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
     # Trust the book, not the loop: close_live_trade only closes on a
     # confirmed fill, so re-read to see what genuinely went through.
@@ -1817,12 +1827,15 @@ def _emergency_square_off(user: user_mod.User, portfolio, mode: str) -> None:
 
     if not still_open:
         st.sidebar.warning(f"Squared off {closed} live position(s).")
-    else:
-        syms = ", ".join(f"{t.get('symbol')} {t.get('side')}" for t in still_open)
-        st.sidebar.error(
-            f"Closed {closed}, but {len(still_open)} did NOT exit: {syms}. "
-            "These are still open at your broker — exit them manually."
-        )
+        return
+
+    syms = ", ".join(f"{t.get('symbol')} {t.get('side')}" for t in still_open)
+    st.sidebar.error(
+        f"Closed {closed}, but {len(still_open)} did NOT exit: {syms}. "
+        "These are still open at your broker — exit them manually."
+    )
+    for f in failures:
+        st.sidebar.caption(f"↳ {f}")
 
 
 def sidebar_for(user: user_mod.User) -> str:
