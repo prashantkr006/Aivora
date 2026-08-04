@@ -207,3 +207,37 @@ def test_the_summary_shows_the_total_change(env):
     out = _run(env).stdout
     assert "TOTAL" in out
     assert "old P&L" in out and "new P&L" in out
+
+
+# -------------------------------------------------------------------
+#  A stale config must not make this silently do nothing
+# -------------------------------------------------------------------
+# First production run printed "32 already correct" against a container
+# whose own config.yaml was still stale: it compared a wrong number to a
+# wrong number and they matched. The override exists so the correct size
+# can be stated outright, and the header shows where each one came from.
+
+def test_the_sizes_it_will_use_are_printed_with_their_source(env):
+    out = _run(env).stdout
+    assert "Sizes :" in out
+    assert "config.yaml" in out
+
+
+def test_an_override_beats_the_config(env):
+    out = _run(env, "--lot-size", "BANKNIFTY=45").stdout
+    assert "BANKNIFTY=45 (override)" in out
+    assert "15 -> 45" in out
+
+
+def test_an_override_applies(env):
+    _run(env, "--lot-size", "BANKNIFTY=45", "--apply", "--keep-costs")
+    t = _trade(env, 1)
+    assert t["lot_size"] == 45
+    assert t["gross_pnl"] == pytest.approx((750.0 - 700.0) * 45)
+
+
+def test_a_malformed_override_is_refused(env):
+    for bad in ("BANKNIFTY", "BANKNIFTY=0", "BANKNIFTY=abc", "BANKNIFTY=-3"):
+        r = _run(env, "--lot-size", bad)
+        assert r.returncode == 2, bad
+    assert _trade(env, 1)["lot_size"] == 15

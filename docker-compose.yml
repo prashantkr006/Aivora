@@ -7,6 +7,12 @@
 #   auth       — FastAPI OAuth callback sidecar (8502).
 #   worker     — headless APScheduler. Runs 5-min ticks per active user
 #                REGARDLESS of whether the dashboard is being visited.
+#
+# config.yaml is bind-mounted like the code, not baked into the image.
+# It used to be COPY'd at build time while src/ and scripts/ were mounted,
+# so a `git pull && docker compose restart` picked up every code change and
+# silently ignored every config change. That is how a corrected lot size
+# sat in the repo, deployed, and still had no effect in production.
 services:
   dashboard:
     build: .
@@ -25,6 +31,7 @@ services:
       - ./scripts:/app/scripts
       - ./src:/app/src
       - ./app:/app/app
+      - ./config.yaml:/app/config.yaml:ro
     depends_on:
       - auth
     restart: unless-stopped
@@ -46,6 +53,7 @@ services:
       - ./logs:/app/logs
       - ./scripts:/app/scripts
       - ./src:/app/src
+      - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped
 
   worker:
@@ -62,4 +70,5 @@ services:
       - ./models:/app/models
       - ./scripts:/app/scripts
       - ./src:/app/src
+      - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped

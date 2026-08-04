@@ -104,6 +104,10 @@ def main() -> int:
                          "the wrong turnover, so they are too low/high)")
     ap.add_argument("--include-open", action="store_true",
                     help="also restate open trades' unrealised P&L")
+    ap.add_argument("--lot-size", action="append", default=[], metavar="SYM=N",
+                    help="override the correct size for one symbol, e.g. "
+                         "--lot-size BANKNIFTY=30. Use this when config.yaml "
+                         "may itself be stale; repeatable.")
     ap.add_argument("--db", type=Path, default=None)
     a = ap.parse_args()
 
@@ -111,12 +115,29 @@ def main() -> int:
         print("--dry-run and --apply contradict each other")
         return 2
 
+    overrides = {}
+    for item in a.lot_size:
+        sym, _, val = item.partition("=")
+        if not val.isdigit() or int(val) <= 0:
+            print(f"bad --lot-size {item!r}; expected SYMBOL=N")
+            return 2
+        overrides[sym.strip().upper()] = int(val)
+
     db_path = a.db or webapp_db.default_db_path()
     cost_cfg = _paper_cost_cfg()
 
     print(f"DB    : {db_path}")
     print(f"Target: user={a.user} mode={a.mode}")
     print(f"Costs : {'left as recorded' if a.keep_costs else 'recomputed on the real turnover'}")
+    # Print what we are treating as correct. The first run of this script
+    # reported "32 already correct" against a container whose config.yaml
+    # was itself stale — it compared a wrong number to a wrong number and
+    # matched. Showing the source makes that impossible to miss.
+    print("Sizes :", ", ".join(
+        f"{s}={overrides.get(s, configured_lot_size(s))}"
+        f"{' (override)' if s in overrides else ' (config.yaml)'}"
+        for s in sorted({i["symbol"] for i in get_config().instruments} | set(overrides))
+    ))
 
     with webapp_db.connect(db_path) as conn:
         rows = conn.execute(
@@ -127,11 +148,14 @@ def main() -> int:
 
     plans, skipped_open, already_right, unknown = [], 0, 0, []
     for r in rows:
-        try:
-            correct = configured_lot_size(r["symbol"])
-        except KeyError:
-            unknown.append(r["symbol"])
-            continue
+        if r["symbol"] in overrides:
+            correct = overrides[r["symbol"]]
+        else:
+            try:
+                correct = configured_lot_size(r["symbol"])
+            except KeyError:
+                unknown.append(r["symbol"])
+                continue
         if int(r["lot_size"] or 0) == correct:
             already_right += 1
             continue
