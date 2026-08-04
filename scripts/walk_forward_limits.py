@@ -418,12 +418,15 @@ def main() -> int:
 
     logs_dir = cfg.paths["logs_dir"]
     logs_dir.mkdir(parents=True, exist_ok=True)
-    summary_path = logs_dir / "walk_forward_2026_summary.txt"
+    # --tag exists to avoid overwriting the default files, but it was only
+    # applied to the CSVs — a tagged run still clobbered the summary and the
+    # recommendation of whatever run came before it.
+    summary_path = logs_dir / f"walk_forward_2026_summary{suffix}.txt"
     summary_path.write_text("\n".join(lines), encoding="utf-8")
     log.info("Wrote summary → %s", summary_path)
 
     rec = _pick_recommendation(agg, list(args.limits))
-    rec_path = logs_dir / "walk_forward_2026_recommendation.txt"
+    rec_path = logs_dir / f"walk_forward_2026_recommendation{suffix}.txt"
     rec_path.write_text(
         "=" * 72 + "\n"
         f"AiVora — HONEST walk-forward recommendation "

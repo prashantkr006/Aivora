@@ -22,6 +22,7 @@ Note on premium sourcing:
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -197,13 +198,58 @@ def _match_and_reprice(
     return matched_df, stats
 
 
+def _parse_dates(values) -> List[date]:
+    """Accept YYYY-MM-DD or a YYYY-MM-DD..YYYY-MM-DD range (weekdays only)."""
+    out: List[date] = []
+    for v in values:
+        if ".." in v:
+            lo, hi = (datetime.strptime(x, "%Y-%m-%d").date()
+                      for x in v.split("..", 1))
+            d = lo
+            while d <= hi:
+                if d.weekday() < 5:
+                    out.append(d)
+                d += timedelta(days=1)
+        else:
+            out.append(datetime.strptime(v, "%Y-%m-%d").date())
+    return out
+
+
 def main() -> int:
+    global USER_ID, DATES
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--user", type=int, default=USER_ID)
+    ap.add_argument("--dates", nargs="+",
+                    default=[d.isoformat() for d in DATES],
+                    help="YYYY-MM-DD, or a range like 2026-07-15..2026-08-04")
+    ap.add_argument("--tag", default=None,
+                    help="suffix for the output filename")
+    args = ap.parse_args()
+    USER_ID = args.user
+    DATES = _parse_dates(args.dates)
+
     print("Loading parquet …")
     cfg = get_config()
     parquet = cfg.paths["parquet_path"]
     df = pd.read_parquet(parquet)
     df["datetime"] = pd.to_datetime(df["datetime"])
     print(f"  {len(df):,} rows, columns={df.shape[1]}")
+
+    # The backtest can only replay a date the feature table actually covers.
+    # Saying so up front beats printing a page of zero-trade rows that look
+    # like the strategy declined to trade.
+    have = set(df["datetime"].dt.date)
+    missing = [d for d in DATES if d not in have]
+    if missing:
+        print(f"\n  !! no feature rows for {len(missing)} of {len(DATES)} "
+              f"requested dates ({missing[0]} .. {missing[-1]}).")
+        print(f"     The parquet ends {max(have)}. Rebuild it before replaying "
+              "those days — otherwise they will show as 'backtest took no "
+              "trades', which is not what happened.")
+        DATES = [d for d in DATES if d in have]
+        if not DATES:
+            print("\n  Nothing left to compare.")
+            return 2
 
     print("Loading live trades …")
     live_all = _load_live_trades()
@@ -303,9 +349,11 @@ def main() -> int:
     push(hr)
 
     OUT_REPORT.parent.mkdir(parents=True, exist_ok=True)
-    OUT_REPORT.write_text("\n".join(lines), encoding="utf-8")
+    out_path = (OUT_REPORT if not args.tag else
+                OUT_REPORT.with_name(f"live_vs_backtest_report_{args.tag}.txt"))
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     print("\n" + "\n".join(lines))
-    print(f"\nReport written to {OUT_REPORT}")
+    print(f"\nReport written to {out_path}")
     return 0
 
 
