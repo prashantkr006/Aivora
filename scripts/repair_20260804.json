@@ -1,0 +1,5 @@
+[
+  {"symbol": "NIFTY",     "side": "PE", "strike": 24650, "pnl": -107.25},
+  {"symbol": "NIFTY",     "side": "PE", "strike": 24600, "pnl": -783.25},
+  {"symbol": "BANKNIFTY", "side": "CE", "strike": 57700, "pnl": 3139.50}
+]
