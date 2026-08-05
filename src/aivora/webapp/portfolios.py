@@ -223,24 +223,40 @@ class UserPortfolio:
             f"lots={trade.lots} @ ₹{trade.entry_premium:.2f}"
         )
 
+    # Fields the position tracker is allowed to refresh on an open trade.
+    # This used to be hardcoded to current_premium and unrealized_pnl, so
+    # the peak_premium and trailing_sl_price the tracker computed every tick
+    # were silently dropped. With nothing carried forward the trail restarted
+    # from the entry price on every tick and could never rise — the trailing
+    # stop has never fired in production.
+    _MARK_COLUMNS = (
+        "current_premium", "unrealized_pnl", "peak_premium", "trailing_sl_price",
+    )
+
     def update_open_marks(self, updates: Dict[str, Dict[str, float]]) -> None:
-        """Update current_premium + unrealized_pnl for open trades."""
+        """Refresh the mark and the trailing-stop state on open trades."""
         if not updates:
             return
         with db_mod.connect() as conn:
             for tid, patch in updates.items():
+                cols = [c for c in self._MARK_COLUMNS if c in patch]
+                if not cols:
+                    continue
+                unknown = set(patch) - set(self._MARK_COLUMNS)
+                if unknown:
+                    # Better to hear about it than to drop it, which is
+                    # exactly how the trailing stop went missing.
+                    log.warning("update_open_marks ignoring unknown field(s) "
+                                "%s on trade %s", sorted(unknown), tid[:8])
+                assignments = ", ".join(f"{c} = ?" for c in cols)
                 conn.execute(
-                    """
-                    UPDATE user_trades
-                    SET current_premium = ?, unrealized_pnl = ?
+                    f"""
+                    UPDATE user_trades SET {assignments}
                     WHERE user_id = ? AND mode = ? AND trade_id = ?
                       AND exit_time IS NULL
                     """,
-                    (
-                        float(patch["current_premium"]),
-                        float(patch["unrealized_pnl"]),
-                        self.user_id, self.mode, tid,
-                    ),
+                    (*[float(patch[c]) for c in cols],
+                     self.user_id, self.mode, tid),
                 )
 
     def close_trade(

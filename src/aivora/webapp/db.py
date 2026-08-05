@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS user_trades (
     realized_pnl       REAL,
     unrealized_pnl     REAL,
     exit_reason        TEXT,
+    -- Trailing-stop state, carried between ticks. Without it the trail
+    -- restarts from the entry price every tick and can never rise.
+    peak_premium       REAL,
+    trailing_sl_price  REAL,
     UNIQUE(user_id, trade_id)
 );
 """
@@ -122,6 +126,12 @@ CREATE TABLE IF NOT EXISTS user_events (
 _COLUMN_MIGRATIONS = [
     ("user_events", "mode", "TEXT"),
     ("user_trades", "tradingsymbol", "TEXT"),
+    # Trailing-stop state. The tracker computed both every tick and handed
+    # them to update_open_marks, which had nowhere to put them and dropped
+    # them — so every tick started over from the entry price and the trail
+    # could never rise. The trailing stop has never fired in production.
+    ("user_trades", "peak_premium", "REAL"),
+    ("user_trades", "trailing_sl_price", "REAL"),
     # Money moved in or out at the broker, which AiVora did not do and
     # cannot infer from its own trades.  Without somewhere to put it, a
     # withdrawal made in Kite left the book permanently overstated.
