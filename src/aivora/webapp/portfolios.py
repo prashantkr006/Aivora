@@ -97,6 +97,8 @@ class UserPortfolio:
             "initial_capital": float(row["initial_capital"]),
             "current_capital": float(row["current_capital"]),
             "peak_capital": float(row["peak_capital"]),
+            "external_flows": float(row["external_flows"] or 0.0),
+            "cash_synced_at": row["cash_synced_at"],
             "master_switch": bool(row["master_switch"]),
             "settings": json.loads(row["settings_json"] or "{}") or default_settings(),
             "last_data_update": row["last_data_update"],
@@ -281,15 +283,22 @@ class UserPortfolio:
             """
             SELECT COALESCE(SUM(realized_pnl), 0.0) AS r,
                    (SELECT initial_capital FROM user_portfolios
-                    WHERE user_id = ? AND mode = ?) AS init
+                    WHERE user_id = ? AND mode = ?) AS init,
+                   (SELECT COALESCE(external_flows, 0.0) FROM user_portfolios
+                    WHERE user_id = ? AND mode = ?) AS flows
             FROM user_trades
             WHERE user_id = ? AND mode = ? AND exit_time IS NOT NULL
             """,
-            (self.user_id, self.mode, self.user_id, self.mode),
+            (self.user_id, self.mode, self.user_id, self.mode,
+             self.user_id, self.mode),
         ).fetchone()
         realized = float(row["r"])
         initial = float(row["init"])
-        current = initial + realized
+        # Money added to or taken out of the account at the broker. Kept
+        # apart from initial_capital so "what I started with" stays a fixed
+        # number and return-on-capital does not jump every time cash moves.
+        flows = float(row["flows"])
+        current = initial + flows + realized
         conn.execute(
             """
             UPDATE user_portfolios
@@ -301,18 +310,62 @@ class UserPortfolio:
         # Invariant check — same firewall as the file-based portfolio.
         row = conn.execute(
             """
-            SELECT current_capital, initial_capital
+            SELECT current_capital, initial_capital,
+                   COALESCE(external_flows, 0.0) AS external_flows
             FROM user_portfolios WHERE user_id = ? AND mode = ?
             """,
             (self.user_id, self.mode),
         ).fetchone()
-        if abs(float(row["current_capital"]) - (float(row["initial_capital"]) + realized)) > 1e-6:
+        expected = (float(row["initial_capital"])
+                    + float(row["external_flows"]) + realized)
+        if abs(float(row["current_capital"]) - expected) > 1e-6:
             raise RuntimeError(
                 "UserPortfolio invariant violated. "
                 f"current={row['current_capital']} "
                 f"initial={row['initial_capital']} "
+                f"external_flows={row['external_flows']} "
                 f"realized={realized}"
             )
+
+    def set_broker_cash(self, cash: float, when: datetime) -> float:
+        """Make the book's capital equal the account's actual cash.
+
+        AiVora only ever knew about money its own trades moved.  Cash added
+        or withdrawn in Kite was invisible, so the book drifted from the
+        account and stayed drifted — permanently, since nothing ever looked.
+
+        The difference is booked as an external flow rather than folded into
+        initial_capital, so "what I started with" stays a fixed number and
+        return-on-capital does not jump every time cash moves.
+
+        Returns the adjustment applied (positive = money came in).
+        """
+        with db_mod.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT initial_capital, current_capital,
+                       COALESCE(external_flows, 0.0) AS external_flows
+                  FROM user_portfolios WHERE user_id = ? AND mode = ?
+                """,
+                (self.user_id, self.mode),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError(f"No {self.mode} portfolio for user {self.user_id}")
+
+            delta = float(cash) - float(row["current_capital"])
+            conn.execute(
+                """
+                UPDATE user_portfolios
+                   SET external_flows = ?, cash_synced_at = ?
+                 WHERE user_id = ? AND mode = ?
+                """,
+                (float(row["external_flows"]) + delta,
+                 when.isoformat(timespec="seconds"), self.user_id, self.mode),
+            )
+            # Rebuild through the normal path so the invariant is enforced
+            # here exactly as it is on every trade close.
+            self._recompute_capital(conn)
+        return delta
 
     # ---- logging ----
     def log_event(self, msg: str, level: str = "info",

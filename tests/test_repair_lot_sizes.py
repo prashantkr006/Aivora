@@ -28,7 +28,9 @@ def env(tmp_path):
     conn = sqlite3.connect(db)
     conn.executescript(SCHEMA)
     conn.execute(
-        "INSERT INTO user_portfolios VALUES (27,'paper',100000.0,101000.0,101000.0,1)"
+        "INSERT INTO user_portfolios "
+        "(user_id, mode, initial_capital, current_capital, peak_capital, master_switch) "
+        "VALUES (27,'paper',100000.0,101000.0,101000.0,1)"
     )
     rows = [
         # (id, mode, symbol, lot_size, entry, exit, gross, costs, realized, exit_time)

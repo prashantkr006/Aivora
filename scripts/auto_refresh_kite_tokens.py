@@ -23,13 +23,13 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from aivora.live import kite_auth  # noqa: E402
 from aivora.utils.logger import get_logger  # noqa: E402
-from aivora.webapp import brokers, db as webapp_db  # noqa: E402
+from aivora.webapp import brokers, db as webapp_db, portfolios  # noqa: E402
 
 log = get_logger("scripts.auto_refresh_kite_tokens")
 
@@ -70,7 +70,31 @@ def _refresh_one(user_id: int) -> Tuple[str, str]:
         return "failed", "totp_auto_login returned empty token"
 
     brokers.upsert(user_id, "ZERODHA", access_token=new_token)
-    return "refreshed", f"new token (len={len(new_token)})"
+    detail = f"new token (len={len(new_token)})"
+
+    # A fresh token pre-market, with nothing open, is the one moment the
+    # broker's cash figure is directly comparable to the book's capital.
+    # Money moved in or out of Kite is invisible to AiVora otherwise, and
+    # the book stays wrong indefinitely because nothing ever checks.
+    try:
+        delta = _sync_capital(user_id, new_token, z)
+        if delta:
+            detail += f"; capital synced ({delta:+,.2f})"
+    except Exception as exc:  # noqa: BLE001
+        # Never let this cost the user their token refresh.
+        log.warning("capital sync failed for user %s: %s", user_id, exc)
+
+    return "refreshed", detail
+
+
+def _sync_capital(user_id: int, access_token: str, z) -> Optional[float]:
+    """Pull the account's cash into the live portfolio.  Returns the change."""
+    from aivora.live.cash_sync import sync_capital_from_broker
+    from aivora.webapp.trading_engine import _build_kite_from_broker
+
+    z.access_token = access_token
+    portfolio = portfolios.UserPortfolio(user_id, "live")
+    return sync_capital_from_broker(portfolio, _build_kite_from_broker(z))
 
 
 def _all_user_ids() -> List[int]:

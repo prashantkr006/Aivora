@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS user_portfolios (
     initial_capital  REAL    NOT NULL,
     current_capital  REAL    NOT NULL,
     peak_capital     REAL    NOT NULL,
+    -- Deposits and withdrawals made at the broker, outside AiVora.
+    external_flows   REAL    NOT NULL DEFAULT 0.0,
+    cash_synced_at   TEXT,
     master_switch    INTEGER DEFAULT 0,
     settings_json    TEXT,
     last_data_update TEXT,
@@ -119,6 +122,11 @@ CREATE TABLE IF NOT EXISTS user_events (
 _COLUMN_MIGRATIONS = [
     ("user_events", "mode", "TEXT"),
     ("user_trades", "tradingsymbol", "TEXT"),
+    # Money moved in or out at the broker, which AiVora did not do and
+    # cannot infer from its own trades.  Without somewhere to put it, a
+    # withdrawal made in Kite left the book permanently overstated.
+    ("user_portfolios", "external_flows", "REAL NOT NULL DEFAULT 0.0"),
+    ("user_portfolios", "cash_synced_at", "TEXT"),
 ]
 
 SCHEMA_INDEXES = [

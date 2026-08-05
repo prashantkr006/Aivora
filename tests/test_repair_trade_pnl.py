@@ -27,9 +27,13 @@ CREATE TABLE user_trades (
     gross_pnl REAL, costs REAL, realized_pnl REAL, unrealized_pnl REAL,
     exit_reason TEXT, tradingsymbol TEXT
 );
+-- Kept in step with db.SCHEMA_USER_PORTFOLIOS by hand; the columns
+-- _recompute_capital reads must all be here or every repair test fails
+-- with an unhelpful "no such column".
 CREATE TABLE user_portfolios (
     user_id INTEGER, mode TEXT, initial_capital REAL, current_capital REAL,
-    peak_capital REAL, master_switch INTEGER
+    peak_capital REAL, external_flows REAL NOT NULL DEFAULT 0.0,
+    cash_synced_at TEXT, master_switch INTEGER
 );
 CREATE TABLE user_events (
     id INTEGER PRIMARY KEY, user_id INTEGER, mode TEXT, ts TEXT,
@@ -48,7 +52,9 @@ def env(tmp_path):
     conn = sqlite3.connect(db)
     conn.executescript(SCHEMA)
     conn.execute(
-        "INSERT INTO user_portfolios VALUES (27,'live',51000.0,51000.0,51000.0,0)"
+        "INSERT INTO user_portfolios "
+        "(user_id, mode, initial_capital, current_capital, peak_capital, master_switch) "
+        "VALUES (27,'live',51000.0,51000.0,51000.0,0)"
     )
     # One trade, force-closed by the emergency square-off at a bogus mark.
     conn.execute(

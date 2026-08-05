@@ -372,6 +372,17 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
     spot_prices = MarketDataCache.spot_prices()
     report["predictions"] = list(predictions.keys())
 
+    # Cash sync — a safety net for the token-refresh hook, which only fires
+    # on the TOTP cron. A token added by hand on the Profile page would
+    # otherwise never trigger it. Guarded to run once a day and only while
+    # flat, so this is a no-op after the first tick.
+    if mode == "live":
+        try:
+            from ..live.cash_sync import sync_capital_from_broker
+            sync_capital_from_broker(portfolio, kite, now)
+        except Exception as exc:  # noqa: BLE001
+            portfolio.append_log(f"capital sync error: {exc}", "error")
+
     # Reconcile against the account BEFORE anything reads the book. A
     # position exited by hand at Kite is otherwise still "open" here, and
     # the tracker would mark it, could fire a stop on it, and would block
