@@ -124,7 +124,9 @@ def run_tick(portfolio: Portfolio, now: Optional[datetime] = None) -> Dict:
 
     # ---- 5. tracker updates open trades and closes any that hit exit rules ----
     try:
-        position_tick(portfolio, now, spot_prices, kite=kite if portfolio.load()["mode"] == "live" else None)
+        # Paper gets the broker too, for quotes only — it prices its exits
+        # off the real contract now. Orders still branch on the mode inside.
+        position_tick(portfolio, now, spot_prices, kite=kite)
     except Exception as exc:
         log.exception("scheduler: position_tick failed")
         portfolio.append_log(f"scheduler: position tracker error - {exc}", "error")

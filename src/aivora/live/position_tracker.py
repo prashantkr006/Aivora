@@ -54,6 +54,40 @@ def _live_premium(kite: KiteClient, trade: dict, spot_now: float) -> float:
     return float(q["ce_ltp"] if trade["side"] == "CE" else q["pe_ltp"])
 
 
+def _mark(kite: Optional[KiteClient], trade: dict, spot: float,
+          now: datetime, settings: Dict) -> float:
+    """What this position is worth right now.
+
+    Ask the market first, in either mode.  Paper used to skip this entirely
+    and price every exit with ``theoretical_exit_premium`` — a model of what
+    the premium ought to be given the spot move and time elapsed.  A model is
+    not a shadow of the live system: on 2026-08-05 paper won 7 of 7 on the
+    same signals live won 5 of 7, because the model turns any favourable spot
+    move into a gain and barely charges for time decay.  A NIFTY put whose
+    spot moved 8.8 points its way over an hour was marked +Rs 34 by the model
+    and -Rs 286 by the market.
+
+    The model stays as the fallback, for trades opened before the contract
+    was recorded and for any tick where the quote does not come back.
+    """
+    if kite is not None and trade.get("tradingsymbol"):
+        try:
+            return _live_premium(kite, trade, spot)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("quote failed for %s %s (%s) — falling back to the model",
+                        trade["symbol"], trade["side"], exc)
+
+    elapsed = _minutes(now, datetime.fromisoformat(trade["entry_time"]))
+    return theoretical_exit_premium(
+        entry_premium=float(trade["entry_premium"]),
+        spot_entry=float(trade.get("entry_spot") or spot),
+        spot_now=spot,
+        side=trade["side"],
+        elapsed_minutes=max(0.0, elapsed),
+        settings=settings,
+    )
+
+
 def _decide_exit(
     trade: dict,
     now: datetime,
@@ -155,24 +189,7 @@ def tick(
     for t in open_trades:
         sym = t["symbol"]
         spot = float(spot_prices.get(sym) or t.get("entry_spot") or 0.0)
-        # Current premium: paper uses the theoretical model, live
-        # pulls a fresh quote (rate-limited by KiteClient).
-        if live and kite is not None:
-            try:
-                current = _live_premium(kite, t, spot)
-            except Exception as exc:
-                log.warning("live quote failed for %s (%s): %s", sym, t["side"], exc)
-                current = float(t.get("current_premium") or t["entry_premium"])
-        else:
-            elapsed = _minutes(now, datetime.fromisoformat(t["entry_time"]))
-            current = theoretical_exit_premium(
-                entry_premium=float(t["entry_premium"]),
-                spot_entry=float(t.get("entry_spot") or spot),
-                spot_now=spot,
-                side=t["side"],
-                elapsed_minutes=max(0.0, elapsed),
-                settings=settings,
-            )
+        current = _mark(kite, t, spot, now, settings)
         # Refresh peak + trailing SL before the exit decision so a
         # sudden spike is captured on the same tick that caused it.
         _step_trailing_sl(t, current, portfolio)
@@ -222,22 +239,10 @@ def emergency_square_off(
         sym = t["symbol"]
         spot = float(spot_prices.get(sym) or t.get("entry_spot") or 0.0)
         if live and kite is not None:
-            try:
-                current = _live_premium(kite, t, spot)
-            except Exception:
-                current = float(t.get("current_premium") or t["entry_premium"])
             from .live_executor import close_live_trade
             close_live_trade(portfolio, kite, t, now, "emergency")
         else:
-            elapsed = _minutes(now, datetime.fromisoformat(t["entry_time"]))
-            current = theoretical_exit_premium(
-                entry_premium=float(t["entry_premium"]),
-                spot_entry=float(t.get("entry_spot") or spot),
-                spot_now=spot,
-                side=t["side"],
-                elapsed_minutes=max(0.0, elapsed),
-                settings=settings,
-            )
+            current = _mark(kite, t, spot, now, settings)
             close_paper_trade(portfolio, t, now, current, "emergency", exit_spot=spot)
         n += 1
     portfolio.append_log(f"Emergency square-off closed {n} position(s)", "warn")

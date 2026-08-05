@@ -101,6 +101,21 @@ def open_paper_trade(
     else:
         entry_premium = _estimate_entry_premium(spot, symbol)
 
+    # Record the contract, so the tracker can re-quote this exact option
+    # instead of modelling what its premium ought to be.  A paper trade
+    # priced off a model rather than the market is not a shadow of the live
+    # system: on 2026-08-05 it won 7 of 7 while live won 5 of 7 on the same
+    # signals, because the model turns any favourable spot move into a gain
+    # and barely charges for time decay.
+    tradingsymbol = None
+    if kite is not None:
+        try:
+            info = kite.atm_option_symbols(symbol, spot)
+            tradingsymbol = info["CE"] if side == "CE" else info["PE"]
+        except Exception as exc:  # noqa: BLE001
+            log.warning("paper: could not resolve %s %s contract (%s) — "
+                        "exits will fall back to the model", symbol, side, exc)
+
     settings = portfolio.load()["settings"]
     # Position size — same rule as backtest_summary_pct.
     capital = float(portfolio.load()["current_capital"])
@@ -121,6 +136,7 @@ def open_paper_trade(
         entry_spot=float(spot),
         current_premium=entry_premium,
         unrealized_pnl=0.0,
+        tradingsymbol=tradingsymbol,
         horizon_close_time=_horizon_close(entry_time, horizon_candles).isoformat(timespec="seconds"),
         entry_prob=float(entry_prob) if entry_prob is not None else None,
         peak_premium=entry_premium,

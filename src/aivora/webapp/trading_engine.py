@@ -396,10 +396,10 @@ def run_user_tick(user_id: int, mode: str, now: Optional[datetime] = None) -> Di
 
     # Position tracker: update marks + close any hitting TP/SL/timeout.
     try:
-        _tracker.tick(
-            portfolio, now, spot_prices,
-            kite=kite if mode == "live" else None,
-        )
+        # Paper gets the broker too, for quotes only — it prices its exits
+        # off the real contract now instead of a model. Orders still branch
+        # on the portfolio's own mode inside the tracker.
+        _tracker.tick(portfolio, now, spot_prices, kite=kite)
     except Exception as exc:  # noqa: BLE001
         portfolio.append_log(f"tracker error: {exc}", "error")
 
