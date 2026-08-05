@@ -94,14 +94,18 @@ reveal the secret. You will need both in Step 4.
 is not on your allow-list. Market data works without it, which makes this
 failure confusing: everything looks fine until the moment you try to trade.
 
+**Ask whoever runs your instance for its IP.** This guide used to print one
+address here, which was wrong the moment a second person tried to use it —
+see below.
+
 1. On [developers.kite.trade](https://developers.kite.trade), go to
    **Profile** — not the app page. The IP list lives on your profile, which is
    why it is easy to miss.
-2. Add this IP:
-   ```
-   43.205.204.155
-   ```
+2. Add the IP you were given.
 3. Save.
+
+Add only the IPv4 address. Do not add an IPv6 address — the trading engine
+does not use one.
 
 Activation is usually quick but can take a few hours. If you skip this, your
 first live order fails with:
@@ -110,8 +114,27 @@ first live order fails with:
 No IPs configured for this app. Add allowed IPs on the Kite developer console.
 ```
 
-Add only that one IPv4 address. Do not add an IPv6 address — the trading engine
-does not use one.
+Two rules that bite people:
+
+- **One IP modification per calendar week.** Get it right the first time or
+  wait seven days.
+- **An IP can be linked to one developer account only.** If you see *"The IP
+  address(es) you are trying to add are already linked to another account"*,
+  someone else has already claimed that server's IP. You cannot share it —
+  the IP list is per developer account, not per app.
+
+### Which case are you?
+
+**Running it for yourself.** Use your server's IP. Nothing else to do.
+
+**Immediate family.** Zerodha allows one developer account to cover spouse,
+dependent children and dependent parents: create a separate app per person
+under that one account, add all the client IDs, and confirm the declaration
+that the IP is used only by you and your immediate family. Everyone can then
+share the one server.
+
+**Anyone else.** They need their own IP, which means their own instance. See
+[second_instance.md](second_instance.md).
 
 ---
 
@@ -302,7 +325,7 @@ Your access token expired or was never set. Go to Profile and log in to Kite
 again.
 
 **`No IPs configured for this app`**
-Step 3 was skipped, or not yet active. Add `43.205.204.155` to the IP list on
+Step 3 was skipped, or not yet active. Add your instance's IP to the list on
 your Kite Connect **Profile** page and wait a few hours.
 
 **`⚠️ Kite disconnected. Reconnect via Profile page.`**
@@ -365,8 +388,8 @@ Increase size only after live data — not backtest data — justifies it.
 
 | | |
 |---|---|
-| Kite redirect URL | `https://auth.aivora-self.com/kite/callback` |
-| Server IP to whitelist | `43.205.204.155` |
+| Kite redirect URL | `https://auth.<your-instance>/kite/callback` |
+| Server IP to whitelist | ask whoever runs your instance |
 | Token expires | daily, ~7:30 AM |
 | Tick frequency | every 5 minutes, 20 seconds past |
 | Trading window | 9:15 to 14:15 for new entries |
