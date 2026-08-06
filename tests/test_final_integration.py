@@ -174,10 +174,16 @@ def test_05_signal_gate_variant18():
     # Case C: prob_down over threshold and > prob_up → "PE"
     r_pe = _seeded_prediction(p_up=0.30, p_down=0.70)
     assert inf.signal_side(r_pe, settings) == "PE"
-    # Case D: vol regime outside → None
+    # Case D: the vol-regime gate still works — but only when it is
+    # configured on. The default deliberately leaves it off (55-month WF:
+    # Rs 8.82L off vs Rs 7.22L on), so this has to state the range rather
+    # than lean on the default, which is what it used to do.
     r_calm = _seeded_prediction()
     r_calm.vol_regime_pct = 0.05
-    assert inf.signal_side(r_calm, settings) is None
+    filtered = {**settings, "vol_regime_min": 0.15, "vol_regime_max": 0.90}
+    assert inf.signal_side(r_calm, filtered) is None
+    # Case E: and with the default range it passes, as intended.
+    assert inf.signal_side(r_calm, settings) == "CE"
     _record("T05", "PASS", "session/regime/threshold gates all fire correctly")
 
 

@@ -113,3 +113,34 @@ def sync_capital_from_broker(
     )
     log.warning("cash sync: %.2f -> %.2f (delta %+.2f)", before, cash, delta)
     return delta
+
+
+def sync_after_token(user_id: int, now: Optional[datetime] = None) -> Optional[float]:
+    """Sync a user's live capital right after a fresh access token lands.
+
+    Call this from **every** path that stores a token.  There are four —
+    the OAuth callback, the Profile page's TOTP button, the api-key save,
+    and the morning TOTP cron — and hooking only the cron meant a user who
+    connected through the browser never got synced.  The per-tick sync was
+    supposed to be the safety net, but the tick returns early outside
+    market hours, so "as soon as the token is added" was not true for
+    anyone connecting in the evening.
+
+    Never raises.  A token that was successfully stored must not be
+    reported as a failure because the balance lookup went wrong.
+    """
+    try:
+        from ..webapp import brokers, portfolios
+        from ..webapp.trading_engine import _build_kite_from_broker
+
+        z = brokers.get(user_id, "ZERODHA")
+        if not z or not z.access_token:
+            return None
+        return sync_capital_from_broker(
+            portfolios.UserPortfolio(user_id, "live"),
+            _build_kite_from_broker(z), now,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("capital sync after token failed for user %s: %s",
+                    user_id, exc)
+        return None

@@ -93,6 +93,10 @@ def kite_callback(request: Request):
     )
     log.info("stored fresh Kite access_token for user_id=%s", user_id)
 
+    # A fresh token is the one moment we can read the account's cash.
+    from ..live.cash_sync import sync_after_token
+    sync_after_token(user_id)
+
     return RedirectResponse(url=f"{DASHBOARD_URL}?kite_connected=1", status_code=303)
 
 

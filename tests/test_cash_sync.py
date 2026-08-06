@@ -173,24 +173,58 @@ def test_a_no_op_sync_still_records_that_it_ran():
 # -------------------------------------------------------------------
 #  Wiring
 # -------------------------------------------------------------------
-def test_the_token_refresh_syncs_capital():
-    """The user's ask: every morning, as the token is added."""
+# A token can land by four routes. Hooking only the cron meant a user who
+# connected through the browser was never synced, and the per-tick net does
+# not help in the evening because the tick returns early outside market
+# hours. Every route has to call it.
+
+@pytest.mark.parametrize("module,fn", [
+    ("scripts.auto_refresh_kite_tokens", "_refresh_one"),   # morning TOTP cron
+    ("aivora.webapp.auth_server", "kite_callback"),         # OAuth callback
+    ("app.multi_user_app", "_exchange_and_store_kite_token"),  # Profile button
+])
+def test_every_path_that_stores_a_token_syncs_capital(module, fn):
+    import importlib
     import inspect
 
-    from scripts import auto_refresh_kite_tokens as m
-
-    assert "_sync_capital" in inspect.getsource(m._refresh_one)
-    assert "sync_capital_from_broker" in inspect.getsource(m._sync_capital)
+    src = inspect.getsource(getattr(importlib.import_module(module), fn))
+    assert "upsert(" in src, "this test is pointed at the wrong function"
+    assert "sync_after_token" in src
+    assert src.index("upsert(") < src.index("sync_after_token"), (
+        "sync after the token is stored, not before"
+    )
 
 
 def test_a_failed_sync_never_costs_the_user_their_token():
+    """The token was stored successfully. A balance lookup that goes wrong
+    must not turn that into a failure."""
     import inspect
 
-    from scripts import auto_refresh_kite_tokens as m
+    from aivora.live import cash_sync
 
-    src = inspect.getsource(m._refresh_one)
-    after = src.split("_sync_capital", 1)[1]
-    assert "except Exception" in after
+    src = inspect.getsource(cash_sync.sync_after_token)
+    assert "except Exception" in src
+    assert "return None" in src
+
+
+def test_sync_after_token_swallows_a_broken_broker(monkeypatch):
+    from aivora.live import cash_sync
+    from aivora.webapp import brokers
+
+    monkeypatch.setattr(brokers, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")))
+    assert cash_sync.sync_after_token(999) is None
+
+
+def test_sync_after_token_does_nothing_without_a_token(monkeypatch):
+    from aivora.live import cash_sync
+    from aivora.webapp import brokers
+
+    class _NoToken:
+        access_token = ""
+
+    monkeypatch.setattr(brokers, "get", lambda *a, **k: _NoToken())
+    assert cash_sync.sync_after_token(1) is None
 
 
 def test_the_tick_syncs_too_for_tokens_added_by_hand():

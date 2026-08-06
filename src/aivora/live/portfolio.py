@@ -116,8 +116,17 @@ def default_settings() -> Dict[str, Any]:
                                            # WF numbers past 14:15 are backtest
                                            # artifacts (synthetic post-market
                                            # exits), 3-mo dominate 55% of P&L.
-        "vol_regime_min": 0.15,
-        "vol_regime_max": 0.90,
+        # Volatility filter deliberately OFF. The 55-month walk-forward is
+        # Rs 8.82L with it off against Rs 7.22L with it on, and the founder
+        # confirmed the wider range on 2026-08-03.
+        #
+        # These stayed at 0.15/0.90 here long after that. Settings live per
+        # portfolio in the database, so realigning the existing portfolios
+        # never touched this function — and every portfolio created since
+        # started on a config that was measured and rejected. The second
+        # instance was set up on 2026-08-05 and came up with the filter on.
+        "vol_regime_min": 0.0,
+        "vol_regime_max": 999.0,
         "max_trades_per_day": 10,
         "horizon_candles": 12,             # 60-minute forward horizon
         "risk_per_trade_pct": 0.02,

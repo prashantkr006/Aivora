@@ -76,25 +76,14 @@ def _refresh_one(user_id: int) -> Tuple[str, str]:
     # broker's cash figure is directly comparable to the book's capital.
     # Money moved in or out of Kite is invisible to AiVora otherwise, and
     # the book stays wrong indefinitely because nothing ever checks.
-    try:
-        delta = _sync_capital(user_id, new_token, z)
-        if delta:
-            detail += f"; capital synced ({delta:+,.2f})"
-    except Exception as exc:  # noqa: BLE001
-        # Never let this cost the user their token refresh.
-        log.warning("capital sync failed for user %s: %s", user_id, exc)
+    # Same helper every other token path uses — sync_after_token never
+    # raises, so a failed balance lookup cannot cost the user their token.
+    from aivora.live.cash_sync import sync_after_token
+    delta = sync_after_token(user_id)
+    if delta:
+        detail += f"; capital synced ({delta:+,.2f})"
 
     return "refreshed", detail
-
-
-def _sync_capital(user_id: int, access_token: str, z) -> Optional[float]:
-    """Pull the account's cash into the live portfolio.  Returns the change."""
-    from aivora.live.cash_sync import sync_capital_from_broker
-    from aivora.webapp.trading_engine import _build_kite_from_broker
-
-    z.access_token = access_token
-    portfolio = portfolios.UserPortfolio(user_id, "live")
-    return sync_capital_from_broker(portfolio, _build_kite_from_broker(z))
 
 
 def _all_user_ids() -> List[int]:

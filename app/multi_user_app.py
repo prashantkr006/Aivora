@@ -989,6 +989,9 @@ def _exchange_and_store_kite_token(user_id: int, request_token: str) -> str:
         client_id=data.get("user_id") or creds.client_id,
         access_token=data["access_token"],
     )
+    # A fresh token is the one moment we can read the account's cash.
+    from aivora.live.cash_sync import sync_after_token
+    sync_after_token(user_id)
     return data["access_token"]
 
 
