@@ -1048,10 +1048,22 @@ def profile_page(user: user_mod.User) -> None:
         if api_key: patch["api_key"] = api_key
         if api_secret: patch["api_secret"] = api_secret
         if password: patch["password"] = password
-        if totp_secret: patch["totp_secret"] = totp_secret.replace(" ", "")
+        # Check the seed here rather than letting it fail at 6:15am in a cron
+        # log. A wrong value once sat here for three days while the morning
+        # refresh failed silently and the user reconnected by hand each day.
+        totp_error = None
+        if totp_secret:
+            from aivora.live.kite_auth import check_totp_secret, normalise_totp_secret
+            totp_error = check_totp_secret(totp_secret)
+            if totp_error is None:
+                patch["totp_secret"] = normalise_totp_secret(totp_secret)
         try:
             broker_mod.upsert(user.id, "ZERODHA", **patch)
-            st.success("Saved.  Any secrets left blank were kept as-is.")
+            if totp_error:
+                st.error(f"Saved everything else, but the TOTP secret was "
+                         f"rejected: {totp_error}")
+            else:
+                st.success("Saved.  Any secrets left blank were kept as-is.")
         except Exception as exc:
             st.error(f"Save failed: {exc}")
 

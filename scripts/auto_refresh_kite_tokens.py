@@ -52,6 +52,12 @@ def _refresh_one(user_id: int) -> Tuple[str, str]:
     if missing:
         return "skipped", f"incomplete TOTP creds — missing: {', '.join(missing)}"
 
+    # Say what is wrong with the seed rather than letting pyotp report
+    # "Non-base32 digit found" from inside the login flow.
+    bad_seed = kite_auth.check_totp_secret(z.totp_secret)
+    if bad_seed:
+        return "failed", f"TOTP secret rejected — {bad_seed}"
+
     # totp_auto_login currently reads KITE_* env vars — populate them
     # in this process for the duration of the call. Not thread-safe but
     # this script is a single-shot daily cron.
@@ -86,6 +92,23 @@ def _refresh_one(user_id: int) -> Tuple[str, str]:
     return "refreshed", detail
 
 
+def _tell_the_user(user_id: int, status: str, detail: str) -> None:
+    """Put a failed refresh where the user will actually see it.
+
+    This used to go only to a cron log. A bad TOTP seed failed every morning
+    for three days with pyotp's "Non-base32 digit found" while the user
+    reconnected by hand each day and assumed auto-login just did not work.
+    Nothing on the dashboard ever said otherwise.
+    """
+    msg = (f"🔑 Morning Kite auto-login {status} — {detail}. "
+           "Connect from the Profile page for today.")
+    for mode in ("live", "paper"):
+        try:
+            portfolios.UserPortfolio(user_id, mode).log_event(msg, "error")
+        except Exception:  # noqa: BLE001
+            pass          # no portfolio in that mode, or DB busy
+
+
 def _all_user_ids() -> List[int]:
     """Return user_ids that have any ZERODHA broker record."""
     with webapp_db.connect() as c:
@@ -111,6 +134,8 @@ def main() -> int:
         status, detail = _refresh_one(uid)
         stats[status] += 1
         log.info("user %s → %s: %s", uid, status.upper(), detail)
+        if status != "refreshed":
+            _tell_the_user(uid, status, detail)
 
     log.info(
         "Done — refreshed=%d skipped=%d failed=%d",

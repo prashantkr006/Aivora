@@ -172,6 +172,52 @@ def exchange_request_token(request_token: str) -> str:
 # =============================================================
 #  Flow 2: TOTP auto-login (optional, one click, no browser)
 # =============================================================
+_B32 = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+
+
+def normalise_totp_secret(secret: str) -> str:
+    """Tidy a pasted TOTP seed into something pyotp will accept.
+
+    Authenticator apps show the seed in spaced groups and some in
+    lowercase, so uppercasing and stripping separators fixes the common
+    paste. It cannot fix a value that is not a seed at all.
+    """
+    return (secret or "").replace(" ", "").replace("-", "").strip().upper()
+
+
+def check_totp_secret(secret: str) -> Optional[str]:
+    """Return why this cannot be a TOTP seed, or None if it looks usable.
+
+    Worth doing at the moment it is saved. A wrong value here fails once a
+    day, at 6:15am, inside a cron log, with pyotp's "Non-base32 digit
+    found" — which says nothing to anyone. In production that ran for three
+    days while the user reconnected by hand every morning, assuming the
+    auto-login simply did not work.
+    """
+    s = normalise_totp_secret(secret)
+    if not s:
+        return "TOTP secret is empty"
+    if s.lower().startswith("OTPAUTH".lower()):
+        return ("That is the whole otpauth:// link. Paste only the secret "
+                "from it — the part after 'secret='")
+    if s.isdigit():
+        return ("That looks like the 6-digit code from your authenticator. "
+                "What is needed is the setup seed — on Zerodha's 2FA screen, "
+                "'Can't scan? Use this key'")
+    bad = sorted(set(s) - _B32 - {"="})
+    if bad:
+        return (f"Not a valid seed: {', '.join(bad)} "
+                f"{'is' if len(bad) == 1 else 'are'} not in the base32 "
+                "alphabet (A-Z and 2-7 only)")
+    try:
+        import pyotp  # local import — kite_auth keeps its deps lazy
+
+        pyotp.TOTP(s).now()
+    except Exception as exc:  # noqa: BLE001
+        return f"Not a valid seed: {exc}"
+    return None
+
+
 _LOGIN_URL = "https://kite.zerodha.com/api/login"
 _TWOFA_URL = "https://kite.zerodha.com/api/twofa"
 _CONNECT_URL_TEMPLATE = "https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
@@ -230,7 +276,7 @@ def totp_auto_login(
         request_id = j1["data"]["request_id"]
 
         # Step 2 — TOTP.
-        totp_code = pyotp.TOTP(totp_secret.replace(" ", "")).now()
+        totp_code = pyotp.TOTP(normalise_totp_secret(totp_secret)).now()
         r2 = sess.post(_TWOFA_URL, data={
             "user_id": user_id, "request_id": request_id,
             "twofa_value": totp_code, "twofa_type": "totp",
