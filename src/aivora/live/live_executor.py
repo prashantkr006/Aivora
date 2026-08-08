@@ -52,6 +52,87 @@ def _wait_for_fill(kite: KiteClient, order_id: str, timeout_sec: int = 20) -> Op
     return last
 
 
+def _untracked_qty(portfolio, kite: KiteClient, tradingsymbol: str) -> int:
+    """How much of this contract the broker holds that the book does not.
+
+    The book is not the account, and an entry decision taken purely from
+    the book can stack a second position on top of one AiVora has lost
+    track of. That doubles the money at risk while only one of the two
+    ever gets exited.
+
+    Returns 0 when they agree, or when the broker cannot be read — an
+    unreachable broker must not stop trading outright, and every other
+    guard still applies.
+    """
+    try:
+        raw = kite.positions()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("could not read positions before entry (%s)", exc)
+        return 0
+
+    held = 0
+    for bucket in ("net", "day"):
+        for row in raw.get(bucket) or []:
+            exch, sym = row.get("exchange"), row.get("tradingsymbol")
+            if sym and f"{exch}:{sym}" == tradingsymbol:
+                held = max(held, int(row.get("quantity") or 0))
+
+    booked = sum(
+        int(t["lots"]) * int(t["lot_size"])
+        for t in portfolio.load()["trades"]
+        if not t.get("exit_time") and t.get("tradingsymbol") == tradingsymbol
+    )
+    return max(0, held - booked)
+
+
+def _abandon(portfolio, kite: KiteClient, order_id: str,
+             status: Optional[str]) -> Optional[dict]:
+    """Give up on an entry order — and take it off the exchange.
+
+    Returning without cancelling used to leave a live LIMIT order sitting
+    at the broker. We had decided not to take the trade and recorded
+    nothing, but the order could still fill minutes later, leaving a
+    position AiVora did not know it held. Observed on 2026-08-07: an entry
+    at 10:15 did not fill inside the timeout, was abandoned, and the next
+    tick opened a second BANKNIFTY put on top of it at 10:20. Only the
+    tracked one was ever exited; the other sat until the broker's own
+    intraday square-off.
+
+    Cancelling races with the fill, so re-read the order afterwards. If it
+    completed anyway, hand the fill back and let the caller record the
+    trade — an untracked position is far worse than an unexpected one.
+
+    Returns the fill to record, or None if the order is genuinely dead.
+    """
+    try:
+        kite.cancel_order(order_id)
+    except Exception as exc:  # noqa: BLE001
+        # A cancel is refused when the order is already gone — filled,
+        # rejected or cancelled. The status read below settles which.
+        log.warning("cancel of %s refused (%s) — checking its final state",
+                    order_id, exc)
+
+    final = None
+    try:
+        final = kite.order_status(order_id)
+    except Exception as exc:  # noqa: BLE001
+        portfolio.append_log(
+            f"LIVE order {order_id} was not filled (status={status}) and its "
+            f"state could not be confirmed ({exc}) — CHECK YOUR BROKER before "
+            "the next signal", "error",
+        )
+        return None
+
+    if (final or {}).get("status") == "COMPLETE":
+        return final
+
+    portfolio.append_log(
+        f"LIVE order {order_id} not filled (status={status}) — cancelled, "
+        f"now {(final or {}).get('status')}", "error",
+    )
+    return None
+
+
 def open_live_trade(
     portfolio: Portfolio,
     kite: KiteClient,
@@ -94,6 +175,18 @@ def open_live_trade(
     lots = max(1, int(risk_budget // max(ltp * lot_size, 1.0)))
     qty = lots * lot_size
 
+    # Ask the account before adding to it. Opening on the strength of the
+    # book alone is how one position becomes two.
+    stray = _untracked_qty(portfolio, kite, tradingsymbol)
+    if stray:
+        portfolio.append_log(
+            f"⛔ Refusing to enter {symbol} {side} — your broker already holds "
+            f"{stray} of {tradingsymbol} that AiVora is not tracking. Close it "
+            "at your broker, or it will be squared off intraday without AiVora "
+            "managing the exit.", "error",
+        )
+        return None
+
     log.warning(
         "LIVE placing BUY %s qty=%d px=%.2f (ltp=%.2f)",
         tradingsymbol, qty, limit_price, ltp,
@@ -107,10 +200,14 @@ def open_live_trade(
     final = _wait_for_fill(kite, order_id, timeout_sec=fill_timeout_sec)
     status = (final or {}).get("status")
     if status != "COMPLETE":
+        final = _abandon(portfolio, kite, order_id, status)
+        if final is None:
+            return None
+        # It filled while we were cancelling — see _abandon.
         portfolio.append_log(
-            f"LIVE order {order_id} not filled: status={status}", "error"
+            f"LIVE order {order_id} filled during cancellation — "
+            "recording the trade rather than losing track of it", "warn",
         )
-        return None
 
     avg_price = float(final.get("average_price") or limit_price)
     horizon = int(settings.get("horizon_candles", 12))

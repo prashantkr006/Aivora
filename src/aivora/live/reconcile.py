@@ -181,6 +181,37 @@ def reconcile_live_book(portfolio, kite, now: Optional[datetime] = None) -> int:
             _close(portfolio, t, now, exit_px)
             closed += 1
 
+    _report_orphans(portfolio, book, by_symbol)
+
     if closed:
         log.warning("reconciled %d trade(s) closed outside AiVora", closed)
     return closed
+
+
+def _report_orphans(portfolio, book: Dict[str, dict],
+                    by_symbol: Dict[str, List[dict]]) -> None:
+    """Say so when the account holds something the book does not.
+
+    This module only ever closes; it will not invent a trade, because a
+    position in the same account may simply be the user's own. But staying
+    silent is worse than either. An entry order that was abandoned without
+    being cancelled once filled minutes later, and AiVora — seeing nothing
+    in its book — opened a second position on top of it. Only the tracked
+    one was exited.
+
+    Nothing is closed here. The point is that it stops being invisible.
+    """
+    for key, row in book.items():
+        qty = int(row.get("quantity") or 0)
+        if qty <= 0:
+            continue
+        booked = sum(int(t["lots"]) * int(t["lot_size"])
+                     for t in by_symbol.get(key, []))
+        if qty > booked:
+            portfolio.append_log(
+                f"⚠️ Your broker holds {qty} of {key} but AiVora is tracking "
+                f"{booked}. The difference is not being managed — no stop, no "
+                "target, and no new entry will be taken in it.", "error",
+            )
+            log.warning("untracked position at broker: %s qty=%d booked=%d",
+                        key, qty, booked)
